@@ -1,0 +1,52 @@
+# Run the project on Windows - step-by-step PowerShell commands
+
+Follow these numbered steps in order. Run each block in PowerShell.
+
+Step 0 (optional): install Chocolatey and PostgreSQL
+Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+choco install postgresql -y
+
+Step 1: ensure PostgreSQL service is running (may require Admin)
+Get-Service *postgres* | Where-Object { $_.Status -ne 'Running' } | ForEach-Object { Start-Service -Name $_.Name }
+
+Step 2: create DB and user (if needed). If `psql` is not on PATH, run full path to `psql.exe`.
+psql -U postgres -c "CREATE USER postgres WITH PASSWORD 'change-me';" 2>$null
+psql -U postgres -c "ALTER ROLE postgres CREATEDB;" 2>$null
+psql -U postgres -c "CREATE DATABASE skincare_db OWNER postgres;" 2>$null
+
+Step 3: backend setup (run inside repo root)
+cd .\backend
+python -m venv venv
+. .\venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
+
+Step 4: set environment variables for this PowerShell session (adjust values)
+$env:POSTGRES_DB = 'skincare_db'
+$env:POSTGRES_USER = 'postgres'
+$env:POSTGRES_PASSWORD = 'yourpassword'
+$env:POSTGRES_HOST = 'localhost'
+$env:POSTGRES_PORT = '5432'
+$env:DJANGO_SECRET = 'change-me'
+$env:JWT_SECRET = 'change-me-jwt'
+
+Step 5: database migrations, optional superuser, seed, and run backend
+python manage.py makemigrations
+python manage.py migrate
+python manage.py createsuperuser
+python seed_products.py
+python manage.py runserver 8000
+
+Keep this PowerShell window open (Django runs here).
+
+Step 6: frontend (open a new PowerShell window)
+cd .\frontend
+npm install
+npm start
+
+Troubleshooting quick tips:
+- If `psycopg2-binary` fails to install: run `pip install --upgrade pip` then retry; installing postgres dev libs may be required on some systems.
+- If `psql` not found: use the full path to `psql.exe` (e.g., `& 'C:\Program Files\PostgreSQL\15\bin\psql.exe' -U postgres -c "CREATE DATABASE skincare_db;"`).
+- If migrations fail with connection errors: check the `POSTGRES_` env vars in this session and that Postgres accepts local connections.
+- If ports 8000 or 3000 are occupied: change them (e.g., `python manage.py runserver 8001` and set `PORT=3001` before `npm start`).
+
