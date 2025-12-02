@@ -4,6 +4,9 @@
 A beauty and wellness e-commerce platform with integrated social features, real-time chat, and product sharing capabilities.
 
 ---
+#smart cart expiry validation
+This feature automatically validates the expiration dates of products added to or present within the user's shopping cart in real-time. It leverages backend data that stores specific expiry dates for individual inventory items.
+
 
 ## 1. User Authentication & Onboarding Flow
 
