@@ -34,6 +34,18 @@ export async function getCart(token) {
   return axios.get(`${API_BASE}/cart/`, getAuthHeaders(token)).then(r => r.data);
 }
 
+export async function updateCartItem(token, productId, qty) {
+  return axios.post(
+    `${API_BASE}/cart/update/`,
+    { product_id: productId, qty },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+export async function removeCartItem(token, productId) {
+  return axios.delete(`${API_BASE}/cart/item/${productId}/remove/`, getAuthHeaders(token)).then(r => r.data);
+}
+
 // Orders
 export async function createOrder(token, items, total) {
   return axios.post(
@@ -41,6 +53,28 @@ export async function createOrder(token, items, total) {
     { items, total },
     getAuthHeaders(token)
   ).then(r => r.data);
+}
+
+// Bookings
+export async function createBooking(token, productId, { qty = 1, delivery_date = null, notes = '', payment_status = 'pending' } = {}) {
+  return axios.post(
+    `${API_BASE}/bookings/create/`,
+    { product_id: productId, qty, delivery_date, notes, payment_status },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+export async function getBookings(token) {
+  return axios.get(`${API_BASE}/bookings/`, getAuthHeaders(token)).then(r => r.data);
+}
+
+// Reviews
+export async function addReview(token, productId, rating, comment = '') {
+  return axios.post(`${API_BASE}/products/${productId}/reviews/create/`, { rating, comment }, getAuthHeaders(token)).then(r => r.data);
+}
+
+export async function getReviews(productId) {
+  return axios.get(`${API_BASE}/products/${productId}/reviews/`).then(r => r.data);
 }
 
 // Liked Products

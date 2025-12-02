@@ -1,14 +1,62 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { login as apiLogin, register as apiRegister, fetchProducts, addToCart } from '../api';
 import AuthModal from './AuthModal';
+import { CartContext } from '../context/CartContext';
 
 const Header = () => {
   const navigate = useNavigate();
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, login } = useContext(AuthContext);
+  const { items, fetchCart } = useContext(CartContext);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [likedCount, setLikedCount] = useState(0);
+  useEffect(() => {
+    if (user) fetchCart();
+  }, [user]);
+  useEffect(() => {
+    setCartCount(items ? items.length : 0);
+  }, [items]);
+
+  // Developer/demo login helper - creates or logs in a demo user
+  const demoLogin = async () => {
+    const demo = { name: 'Demo User', email: 'demo@example.com', password: 'demopass' };
+    try {
+      // try login first
+      const res = await apiLogin(demo.email, demo.password).catch(async () => {
+        // if login fails, register then login
+        await apiRegister(demo.name, demo.email, demo.password);
+        return apiLogin(demo.email, demo.password);
+      });
+      // call AuthContext.login
+      if (res && res.access_token) {
+        // AuthContext expects login(userData, access, refresh)
+        const userData = res.user || { id: null, name: demo.name, email: demo.email };
+        // call context login so other contexts react
+        login(userData, res.access_token, res.refresh_token);
+        // fetch cart after login
+        await fetchCart();
+        // if cart empty, add first product for demo
+        if ((!items || items.length === 0)) {
+          try {
+            const prods = await fetchProducts();
+            if (prods && prods.length > 0) {
+              await addToCart(res.access_token, prods[0].id, 1);
+              await fetchCart();
+            }
+          } catch (e) {
+            // ignore demo auto-add failures
+            console.warn('Demo auto-add failed', e);
+          }
+        }
+        return;
+      }
+    } catch (err) {
+      console.error('Demo login failed', err);
+      alert('Demo login failed: ' + (err.response?.data?.error || err.message));
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleProfileClick = () => {
@@ -75,6 +123,11 @@ const Header = () => {
             <button className="header-icon-btn" onClick={handleProfileClick} title={user ? user.name : 'Login'}>
               <i className="fas fa-user"></i>
             </button>
+            {!user && (
+              <button className="header-icon-btn demo-login-btn" onClick={demoLogin} title="Demo Login" style={{marginLeft:8}}>
+                Demo
+              </button>
+            )}
             
             {user && (
               <div className="user-greeting">

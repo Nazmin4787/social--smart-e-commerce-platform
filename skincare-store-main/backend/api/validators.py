@@ -4,6 +4,97 @@ Input validation utilities for API endpoints.
 import re
 from django.core.validators import validate_email as django_validate_email
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+# Image validation and optimization
+def validate_image_file(f, max_size_mb=5, allowed_formats=('JPEG', 'PNG', 'GIF')):
+    """Validate uploaded image file for size and format.
+
+    Returns (True, None) if valid, else (False, error_message).
+    """
+    # size check
+    try:
+        size = f.size
+    except Exception:
+        return False, 'Invalid file'
+    if size > max_size_mb * 1024 * 1024:
+        return False, f'Image too large. Max size is {max_size_mb} MB'
+
+    # format check using Pillow
+    try:
+        from PIL import Image
+        img = Image.open(f)
+        fmt = img.format.upper() if getattr(img, 'format', None) else None
+        if fmt not in allowed_formats:
+            return False, f'Unsupported image format: {fmt}. Allowed: {", ".join(allowed_formats)}'
+        # reset file pointer for further reads
+        f.seek(0)
+    except Exception:
+        return False, 'Unable to process image file'
+
+    return True, None
+
+
+def optimize_image_file(f, target_width=2000, quality=85):
+    """Optimize an uploaded image: resize to target_width if larger and reduce quality for JPEGs.
+
+    Returns a Django `SimpleUploadedFile` containing the optimized image bytes.
+    """
+    from io import BytesIO
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+    try:
+        img = Image.open(f)
+    except Exception:
+        return None
+
+    orig_format = img.format or 'JPEG'
+
+    # Convert animated GIFs and others to a safe mode where possible
+    if orig_format.upper() == 'GIF':
+        # keep GIFs as is (don't try to re-encode animated GIFs)
+        f.seek(0)
+        content = f.read()
+        return SimpleUploadedFile(getattr(f, 'name', 'image.gif'), content, content_type='image/gif')
+
+    # Ensure RGB for JPEG
+    if img.mode in ('RGBA', 'P'):
+        img = img.convert('RGB')
+
+    # Resize if wider than target_width
+    try:
+        width, height = img.size
+        if width > target_width:
+            new_h = int((target_width / float(width)) * height)
+            img = img.resize((target_width, new_h), Image.LANCZOS)
+    except Exception:
+        pass
+
+    out = BytesIO()
+    save_kwargs = {}
+    fmt = orig_format.upper()
+    if fmt in ('JPEG', 'JPG'):
+        save_kwargs['format'] = 'JPEG'
+        save_kwargs['quality'] = quality
+        save_kwargs['optimize'] = True
+    else:
+        # PNG and others
+        save_kwargs['format'] = fmt
+        if fmt == 'PNG':
+            save_kwargs['optimize'] = True
+
+    try:
+        img.save(out, **save_kwargs)
+        out.seek(0)
+        content = out.read()
+        name = getattr(f, 'name', 'image')
+        # ensure extension
+        if not name.lower().endswith('.jpg') and fmt in ('JPEG', 'JPG'):
+            name = name + '.jpg'
+        return SimpleUploadedFile(name, content, content_type=f'image/{fmt.lower()}')
+    except Exception:
+        return None
 
 
 def validate_email(email):

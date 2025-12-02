@@ -1,13 +1,15 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
+  const navigate = useNavigate();
   return (
     <div className="product-card">
       <div className="product-image">
         {product.images && product.images.length > 0 ? (
-          <img src={product.images[0]} alt={product.title} />
+          <img src={product.images[0]} alt={product.title} onClick={() => navigate(`/products/${product.id}`)} style={{cursor: 'pointer'}} />
         ) : (
-          <div className="product-placeholder">
+          <div className="product-placeholder" onClick={() => navigate(`/products/${product.id}`)} style={{cursor: 'pointer'}}>
             <i className="fas fa-image"></i>
           </div>
         )}
@@ -23,7 +25,7 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
       </div>
       
       <div className="product-info">
-        <h3 className="product-title">{product.title}</h3>
+        <h3 className="product-title" onClick={() => navigate(`/products/${product.id}`)} style={{cursor: 'pointer'}}>{product.title}</h3>
         <p className="product-description">
           {product.description.substring(0, 80)}
           {product.description.length > 80 ? '...' : ''}

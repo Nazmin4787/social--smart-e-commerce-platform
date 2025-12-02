@@ -21,7 +21,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
 
-    "api",
+    # Use AppConfig to run startup tasks (demo seeding)
+    "api.apps.ApiConfig",
 ]
 
 
@@ -61,6 +62,10 @@ TEMPLATES = [
 WSGI_APPLICATION = "skincare_backend.wsgi.application"
 
 STATIC_URL = "/static/"
+
+# Media files (for uploads like banner images)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # PostgreSQL configuration (example: set in .env)
 DATABASES = {

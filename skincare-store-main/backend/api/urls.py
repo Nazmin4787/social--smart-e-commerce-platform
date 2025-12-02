@@ -10,7 +10,12 @@ urlpatterns = [
     path('auth/refresh/', views.refresh_token),
     path('cart/add/', views.add_to_cart),
     path('cart/', views.get_cart),
+    path('cart/update/', views.update_cart_item),
+    path('cart/item/<int:product_id>/remove/', views.remove_cart_item),
     path('orders/create/', views.create_order),
+    path('bookings/create/', views.create_booking),
+    path('bookings/', views.get_bookings),
+    path('bookings/<int:booking_id>/', views.get_booking),
     
     # User Profile
     path('profile/', views.get_user_profile),
@@ -35,4 +40,22 @@ urlpatterns = [
     
     # About Us
     path('about-us/', views.about_us),
+    # Banners
+    path('banners/', views.get_banners),
+    path('admin/banners/', views.admin_banners),
+    # Admin Orders
+    path('admin/orders/', views.admin_orders),
+    path('admin/orders/<int:order_id>/status/', views.admin_update_order_status),
+    # Admin products
+    path('admin/products/list/', views.admin_products_list),
+    path('admin/products/<int:product_id>/stock/', views.admin_update_product_stock),
+    path('admin/products/bulk-update/', views.admin_bulk_update_stock),
+    # Admin dashboard
+    path('admin/dashboard/', views.admin_dashboard),
+    path('admin/dashboard/recent-orders/', views.admin_recent_orders),
+    path('admin/dashboard/low-stock/', views.admin_low_stock),
+    path('admin/dashboard/top-products/', views.admin_top_selling),
+    # Reviews
+    path('products/<int:product_id>/reviews/', views.get_reviews),
+    path('products/<int:product_id>/reviews/create/', views.add_review),
 ]
