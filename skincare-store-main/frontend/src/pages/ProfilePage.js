@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { getProfile } from '../api';
+import { getProfile, getLikedProducts, likeProduct, addToCart } from '../api';
 import Header from '../components/Header';
+import ProductCard from '../components/ProductCard';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -10,6 +11,9 @@ const ProfilePage = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
+  const [likedProducts, setLikedProducts] = useState([]);
+  const [likedProductsLoading, setLikedProductsLoading] = useState(false);
+  const [likedProductIds, setLikedProductIds] = useState([]);
 
   useEffect(() => {
     if (!user) {
@@ -17,7 +21,10 @@ const ProfilePage = () => {
       return;
     }
     fetchProfile();
-  }, [user, navigate]);
+    if (activeTab === 'liked') {
+      fetchLikedProducts();
+    }
+  }, [user, navigate, activeTab]);
 
   const fetchProfile = async () => {
     try {
@@ -27,6 +34,42 @@ const ProfilePage = () => {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLikedProducts = async () => {
+    setLikedProductsLoading(true);
+    try {
+      const data = await getLikedProducts(user.token);
+      console.log('Fetched liked products:', data);
+      setLikedProducts(data);
+      setLikedProductIds(data.map(item => item.product.id));
+    } catch (error) {
+      console.error('Error fetching liked products:', error);
+      setLikedProducts([]);
+    } finally {
+      setLikedProductsLoading(false);
+    }
+  };
+
+  const handleLike = async (productId) => {
+    try {
+      await likeProduct(user.token, productId);
+      // Refresh liked products
+      fetchLikedProducts();
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      alert('Failed to update like status');
+    }
+  };
+
+  const handleAddToCart = async (product) => {
+    try {
+      await addToCart(user.token, product.id, 1);
+      alert('Product added to cart!');
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      alert(error.response?.data?.error || 'Failed to add to cart');
     }
   };
 
@@ -167,13 +210,32 @@ const ProfilePage = () => {
             {activeTab === 'liked' && (
               <div className="profile-section">
                 <h2 className="section-heading">Liked Products</h2>
-                <div className="liked-empty">
-                  <i className="fas fa-heart"></i>
-                  <p>You haven't liked any products yet</p>
-                  <button className="btn-primary" onClick={() => navigate('/')}>
-                    Explore Products
-                  </button>
-                </div>
+                {likedProductsLoading ? (
+                  <div className="loading-spinner">
+                    <div className="spinner"></div>
+                    <p>Loading liked products...</p>
+                  </div>
+                ) : likedProducts.length === 0 ? (
+                  <div className="liked-empty">
+                    <i className="fas fa-heart"></i>
+                    <p>You haven't liked any products yet</p>
+                    <button className="btn-primary" onClick={() => navigate('/')}>
+                      Explore Products
+                    </button>
+                  </div>
+                ) : (
+                  <div className="products-grid">
+                    {likedProducts.map((item) => (
+                      <ProductCard
+                        key={item.product.id}
+                        product={item.product}
+                        onLike={handleLike}
+                        onAddToCart={handleAddToCart}
+                        isLiked={true}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

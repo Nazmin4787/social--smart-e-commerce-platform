@@ -35,6 +35,7 @@ urlpatterns = [
     
     # Liked Products
     path('liked-products/', views.get_liked_products),
+    path('liked-products/toggle/', views.toggle_like_product),
     path('liked-products/like/', views.like_product),
     path('liked-products/<int:product_id>/unlike/', views.unlike_product),
     
@@ -49,6 +50,8 @@ urlpatterns = [
     # Admin products
     path('admin/products/list/', views.admin_products_list),
     path('admin/products/<int:product_id>/stock/', views.admin_update_product_stock),
+    path('admin/products/<int:product_id>/update/', views.admin_product_update),
+    path('admin/products/<int:product_id>/delete/', views.admin_product_delete),
     path('admin/products/bulk-update/', views.admin_bulk_update_stock),
     # Admin dashboard
     path('admin/dashboard/', views.admin_dashboard),

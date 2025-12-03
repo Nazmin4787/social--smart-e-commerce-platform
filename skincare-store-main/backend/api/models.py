@@ -41,7 +41,14 @@ class AppUser(models.Model):
         return check_password(raw_password, self.password)
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'email': self.email, 'bio': self.bio}
+        return {
+            'id': self.id, 
+            'name': self.name, 
+            'email': self.email, 
+            'bio': self.bio,
+            'is_staff': self.is_staff,
+            'is_superuser': self.is_superuser
+        }
 
 
 class Cart(models.Model):

@@ -48,27 +48,80 @@ def get_product(request, product_id):
 def create_product(request):
     if request.method != "POST":
         return HttpResponseBadRequest()
-    body = json.loads(request.body)
     
-    # Validate product data
-    valid, errors = validate_product_data(body)
-    if not valid:
-        return JsonResponse({"error": "Validation failed", "details": errors}, status=400)
-    
-    # Sanitize inputs
-    title = sanitize_string(body.get("title"), max_length=255)
-    description = sanitize_string(body.get("description", ""), max_length=5000)
-    category = sanitize_string(body.get("category", "general"), max_length=100)
-    
-    p = Product.objects.create(
-        title=title,
-        description=description,
-        price=body.get("price", 0),
-        stock=int(body.get("stock", 0)),
-        images=body.get("images", []),
-        category=category,
-    )
-    return JsonResponse({"id": p.id, "message": "Product created successfully"}, status=201)
+    # Check if request has files (multipart/form-data)
+    if request.FILES:
+        # Handle file upload
+        title = request.POST.get("title", "")
+        description = request.POST.get("description", "")
+        price = request.POST.get("price", 0)
+        stock = request.POST.get("stock", 0)
+        category = request.POST.get("category", "general")
+        
+        # Sanitize inputs
+        title = sanitize_string(title, max_length=255)
+        description = sanitize_string(description, max_length=5000)
+        category = sanitize_string(category, max_length=100)
+        
+        # Handle image uploads
+        images = []
+        uploaded_files = request.FILES.getlist('images')
+        
+        if uploaded_files:
+            import os
+            from django.conf import settings
+            from django.core.files.storage import default_storage
+            
+            # Create products directory if it doesn't exist
+            products_dir = os.path.join(settings.MEDIA_ROOT, 'products')
+            os.makedirs(products_dir, exist_ok=True)
+            
+            for uploaded_file in uploaded_files:
+                # Generate unique filename
+                import uuid
+                ext = uploaded_file.name.split('.')[-1]
+                filename = f"{uuid.uuid4()}.{ext}"
+                filepath = os.path.join('products', filename)
+                
+                # Save the file
+                saved_path = default_storage.save(filepath, uploaded_file)
+                
+                # Store the URL (accessible via MEDIA_URL)
+                image_url = f"{settings.MEDIA_URL}{saved_path}"
+                images.append(image_url)
+        
+        p = Product.objects.create(
+            title=title,
+            description=description,
+            price=float(price) if price else 0,
+            stock=int(stock) if stock else 0,
+            images=images,
+            category=category,
+        )
+        return JsonResponse({"id": p.id, "message": "Product created successfully"}, status=201)
+    else:
+        # Handle JSON data (backward compatibility)
+        body = json.loads(request.body)
+        
+        # Validate product data
+        valid, errors = validate_product_data(body)
+        if not valid:
+            return JsonResponse({"error": "Validation failed", "details": errors}, status=400)
+        
+        # Sanitize inputs
+        title = sanitize_string(body.get("title"), max_length=255)
+        description = sanitize_string(body.get("description", ""), max_length=5000)
+        category = sanitize_string(body.get("category", "general"), max_length=100)
+        
+        p = Product.objects.create(
+            title=title,
+            description=description,
+            price=body.get("price", 0),
+            stock=int(body.get("stock", 0)),
+            images=body.get("images", []),
+            category=category,
+        )
+        return JsonResponse({"id": p.id, "message": "Product created successfully"}, status=201)
 
 
 @csrf_exempt
@@ -894,6 +947,55 @@ def unlike_product(request, product_id):
         return JsonResponse({"error": "Product not in favorites"}, status=404)
 
 
+@csrf_exempt
+def toggle_like_product(request):
+    """Toggle like status for a product (like if not liked, unlike if already liked)."""
+    if request.method != "POST":
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    data = decode_jwt(token)
+    
+    if not data or "error" in data:
+        error_msg = data.get("error", "Unauthorized") if data else "Unauthorized"
+        return JsonResponse({"error": error_msg}, status=401)
+    
+    try:
+        user = AppUser.objects.get(pk=data["user_id"])
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    body = json.loads(request.body)
+    product_id = body.get("product_id")
+    
+    if not product_id:
+        return JsonResponse({"error": "Product ID is required"}, status=400)
+    
+    try:
+        product = Product.objects.get(pk=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({"error": "Product not found"}, status=404)
+    
+    # Check if already liked
+    liked_product = UserLikedProduct.objects.filter(user=user, product=product).first()
+    
+    if liked_product:
+        # Unlike - remove from favorites
+        liked_product.delete()
+        return JsonResponse({
+            "message": "Product removed from favorites",
+            "liked": False
+        })
+    else:
+        # Like - add to favorites
+        liked = UserLikedProduct.objects.create(user=user, product=product)
+        return JsonResponse({
+            "message": "Product added to favorites",
+            "liked": True,
+            "data": liked.to_dict()
+        }, status=201)
+
+
 # ABOUT US ENDPOINT
 
 def about_us(request):
@@ -1048,6 +1150,115 @@ def admin_bulk_update_stock(request):
             results['errors'].append({'id': pid, 'error': 'not found'})
 
     return JsonResponse(results)
+
+
+@csrf_exempt
+def admin_product_update(request, product_id):
+    """Admin endpoint to update a product. Supports both JSON and multipart/form-data."""
+    if request.method not in ('PUT', 'POST'):
+        return HttpResponseBadRequest()
+
+    user, err = _require_admin(request)
+    if err:
+        return err
+
+    try:
+        product = Product.objects.get(pk=product_id)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
+
+    # Check if request has files (multipart/form-data)
+    if request.FILES:
+        # Handle file upload
+        title = request.POST.get("title")
+        description = request.POST.get("description")
+        price = request.POST.get("price")
+        stock = request.POST.get("stock")
+        category = request.POST.get("category")
+        
+        if title:
+            product.title = sanitize_string(title, max_length=255)
+        if description is not None:
+            product.description = sanitize_string(description, max_length=5000)
+        if price:
+            product.price = float(price)
+        if stock is not None:
+            product.stock = int(stock)
+        if category:
+            product.category = sanitize_string(category, max_length=100)
+        
+        # Handle new image uploads
+        uploaded_files = request.FILES.getlist('images')
+        if uploaded_files:
+            import os
+            from django.conf import settings
+            from django.core.files.storage import default_storage
+            
+            # Create products directory if it doesn't exist
+            products_dir = os.path.join(settings.MEDIA_ROOT, 'products')
+            os.makedirs(products_dir, exist_ok=True)
+            
+            # Keep existing images and add new ones
+            new_images = list(product.images) if product.images else []
+            
+            for uploaded_file in uploaded_files:
+                # Generate unique filename
+                import uuid
+                ext = uploaded_file.name.split('.')[-1]
+                filename = f"{uuid.uuid4()}.{ext}"
+                filepath = os.path.join('products', filename)
+                
+                # Save the file
+                saved_path = default_storage.save(filepath, uploaded_file)
+                
+                # Store the URL
+                image_url = f"{settings.MEDIA_URL}{saved_path}"
+                new_images.append(image_url)
+            
+            product.images = new_images
+        
+        product.save()
+        return JsonResponse({'id': product.id, 'message': 'Product updated successfully'})
+    else:
+        # Handle JSON data
+        try:
+            body = json.loads(request.body)
+        except Exception:
+            return HttpResponseBadRequest()
+
+        if 'title' in body:
+            product.title = sanitize_string(body['title'], max_length=255)
+        if 'description' in body:
+            product.description = sanitize_string(body['description'], max_length=5000)
+        if 'price' in body:
+            product.price = float(body['price'])
+        if 'stock' in body:
+            product.stock = int(body['stock'])
+        if 'category' in body:
+            product.category = sanitize_string(body['category'], max_length=100)
+        if 'images' in body:
+            product.images = body['images']
+
+        product.save()
+        return JsonResponse({'id': product.id, 'message': 'Product updated successfully'})
+
+
+@csrf_exempt
+def admin_product_delete(request, product_id):
+    """Admin endpoint to delete a product."""
+    if request.method != 'DELETE':
+        return HttpResponseBadRequest()
+
+    user, err = _require_admin(request)
+    if err:
+        return err
+
+    try:
+        product = Product.objects.get(pk=product_id)
+        product.delete()
+        return JsonResponse({'message': 'Product deleted successfully'})
+    except Product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
 
 
 @csrf_exempt

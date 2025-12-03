@@ -123,6 +123,13 @@ const Header = () => {
             <button className="header-icon-btn" onClick={handleProfileClick} title={user ? user.name : 'Login'}>
               <i className="fas fa-user"></i>
             </button>
+
+            {user && user.is_staff && (
+              <button className="header-icon-btn" onClick={() => navigate('/admin')} title="Admin Panel" style={{background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)', color: 'white', borderRadius: '8px', padding: '0.5rem 1rem'}}>
+                <i className="fas fa-cog"></i> Admin
+              </button>
+            )}
+
             {!user && (
               <button className="header-icon-btn demo-login-btn" onClick={demoLogin} title="Demo Login" style={{marginLeft:8}}>
                 Demo

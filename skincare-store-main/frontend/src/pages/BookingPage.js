@@ -29,7 +29,8 @@ const BookingPage = () => {
   const submitBooking = async () => {
     if (!user) return alert('Please login to book');
     try {
-      const res = await createBooking(user.token, product.id, { qty, delivery_date: deliveryDate, notes });
+      const token = localStorage.getItem('accessToken');
+      const res = await createBooking(token, product.id, { qty, delivery_date: deliveryDate, notes });
       alert('Booking created');
       navigate('/profile');
     } catch (err) {

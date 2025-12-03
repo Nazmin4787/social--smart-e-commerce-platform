@@ -29,7 +29,8 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
 
   const fetchLikedProducts = async () => {
     try {
-      const data = await getLikedProducts(user.token);
+      const token = localStorage.getItem('accessToken');
+      const data = await getLikedProducts(token);
       setLikedProducts(data.map(item => item.product.id));
     } catch (error) {
       console.error('Error fetching liked products:', error);
@@ -43,7 +44,8 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
     }
 
     try {
-      await likeProduct(user.token, productId);
+      const token = localStorage.getItem('accessToken');
+      await likeProduct(token, productId);
       if (likedProducts.includes(productId)) {
         setLikedProducts(likedProducts.filter(id => id !== productId));
       } else {
@@ -51,6 +53,7 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
       }
     } catch (error) {
       console.error('Error toggling like:', error);
+      alert('Failed to update like status. Please try logging in again.');
     }
   };
 
@@ -61,7 +64,8 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
     }
 
     try {
-      await addToCart(user.token, product.id, 1);
+      const token = localStorage.getItem('accessToken');
+      await addToCart(token, product.id, 1);
       alert('Product added to cart!');
     } catch (error) {
       console.error('Error adding to cart:', error);

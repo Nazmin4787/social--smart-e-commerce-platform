@@ -34,7 +34,8 @@ const ProductDetailPage = () => {
   const handleAddToCart = async () => {
     if (!user) return alert('Please login');
     try {
-      await addToCart(user.token, product.id, 1);
+      const token = localStorage.getItem('accessToken');
+      await addToCart(token, product.id, 1);
       alert('Added to cart');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to add to cart');
@@ -48,7 +49,8 @@ const ProductDetailPage = () => {
   const submitReview = async () => {
     if (!user) return alert('Please login to review');
     try {
-      await addReview(user.token, product.id, rating, comment);
+      const token = localStorage.getItem('accessToken');
+      await addReview(token, product.id, rating, comment);
       setComment('');
       const rs = await getReviews(id);
       setReviews(rs);

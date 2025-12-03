@@ -12,6 +12,7 @@ const AuthModal = ({ onClose }) => {
     password: ''
   });
   const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('error'); // 'error', 'success', 'info'
   const [loading, setLoading] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [notifyUpdates, setNotifyUpdates] = useState(false);
@@ -27,8 +28,10 @@ const AuthModal = ({ onClose }) => {
   const handleContinue = () => {
     if (formData.phone.length >= 10) {
       setStep(2);
+      setMessage('');
     } else {
       setMessage('Please enter a valid phone number');
+      setMessageType('error');
     }
   };
 
@@ -39,24 +42,70 @@ const AuthModal = ({ onClose }) => {
 
     if (!acceptTerms) {
       setMessage('Please accept the Terms & Conditions and Privacy Policy');
+      setMessageType('error');
       setLoading(false);
       return;
     }
 
     try {
       if (isLogin) {
+        console.log('Attempting login with:', formData.email);
         const response = await apiLogin(formData.email, formData.password);
-        login(response.user, response.access_token, response.refresh_token);
-        onClose();
-        window.location.reload();
+        console.log('Login response:', response);
+        
+        if (response && response.user && response.access_token) {
+          login(response.user, response.access_token, response.refresh_token);
+          setMessage('Login successful! Redirecting...');
+          setMessageType('success');
+          setTimeout(() => {
+            onClose();
+            window.location.reload();
+          }, 1000);
+        } else {
+          setMessage('Login failed: Invalid response from server');
+          setMessageType('error');
+        }
       } else {
+        console.log('Attempting registration with:', formData.email);
         const response = await apiRegister(formData.name, formData.email, formData.password);
-        login(response.user, response.access_token, response.refresh_token);
-        onClose();
-        window.location.reload();
+        console.log('Register response:', response);
+        
+        if (response && response.user && response.access_token) {
+          login(response.user, response.access_token, response.refresh_token);
+          setMessage('Registration successful! Redirecting...');
+          setMessageType('success');
+          setTimeout(() => {
+            onClose();
+            window.location.reload();
+          }, 1000);
+        } else {
+          setMessage('Registration failed: Invalid response from server');
+          setMessageType('error');
+        }
       }
     } catch (error) {
-      setMessage(error.response?.data?.error || 'An error occurred');
+      console.error('Auth error:', error);
+      console.error('Error response:', error.response);
+      
+      let errorMsg = 'An error occurred. Please try again.';
+      
+      if (error.response) {
+        errorMsg = error.response.data?.error || error.response.data?.message || 
+                   `Server error: ${error.response.status}`;
+      } else if (error.request) {
+        errorMsg = 'Cannot connect to server. Please check if the backend is running.';
+      } else {
+        errorMsg = error.message || 'An unexpected error occurred';
+      }
+      
+      if (errorMsg.includes('already exists')) {
+        setMessage('This email is already registered. Please use Login instead.');
+        setMessageType('info');
+        setIsLogin(true); // Switch to login tab
+      } else {
+        setMessage(errorMsg);
+        setMessageType('error');
+      }
     } finally {
       setLoading(false);
     }
@@ -133,7 +182,7 @@ const AuthModal = ({ onClose }) => {
                 </div>
               </div>
 
-              {message && <p className="auth-error-msg">{message}</p>}
+              {message && <div className={`auth-error-msg ${messageType}`}>{message}</div>}
             </div>
           </div>
         ) : (
@@ -157,6 +206,12 @@ const AuthModal = ({ onClose }) => {
 
             <form onSubmit={handleSubmit} className="auth-details-form">
               <h3>{isLogin ? 'Welcome Back!' : 'Create Your Account'}</h3>
+              
+              {isLogin && (
+                <div style={{background: '#e0f2fe', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem', color: '#0369a1'}}>
+                  💡 <strong>Admin Login:</strong> admin@example.com / admin123
+                </div>
+              )}
               
               {!isLogin && (
                 <div className="form-field">
@@ -214,7 +269,7 @@ const AuthModal = ({ onClose }) => {
                 {loading ? 'Please wait...' : (isLogin ? 'Login' : 'Sign Up')}
               </button>
 
-              {message && <p className="auth-error-msg">{message}</p>}
+              {message && <div className={`auth-error-msg ${messageType}`}>{message}</div>}
             </form>
           </div>
         )}
