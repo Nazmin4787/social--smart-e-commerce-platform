@@ -49,7 +49,7 @@ export const CartProvider = ({ children }) => {
   const total = +(subtotal + tax).toFixed(2);
 
   return (
-    <CartContext.Provider value={{ items, loading, addItem, setQuantity, removeItem, subtotal, tax, total, fetchCart }}>
+    <CartContext.Provider value={{ items, loading, addItem, setQuantity, removeItem, subtotal, tax, total, fetchCart, refreshCart: fetchCart }}>
       {children}
     </CartContext.Provider>
   );

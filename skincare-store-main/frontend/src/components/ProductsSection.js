@@ -88,7 +88,7 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
   }
 
   return (
-    <section className={`products-section ${isTrending ? 'trending' : ''}`}>
+    <section id="products" className={`products-section ${isTrending ? 'trending' : ''}`}>
       <div className="container">
         <h2 className="section-title">{title}</h2>
         <div className="products-grid">

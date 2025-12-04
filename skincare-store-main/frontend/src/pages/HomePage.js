@@ -12,8 +12,8 @@ const HomePage = () => {
       <main>
         <Hero />
         <CategorySection />
-        <ProductsSection title="Featured Products" limit={8} />
-        <ProductsSection title="Trending Products" limit={4} isTrending={true} />
+        <ProductsSection title="Featured Products" limit={50} />
+        <ProductsSection title="Trending Products" limit={20} isTrending={true} />
         <AboutSection />
       </main>
       <footer className="footer">

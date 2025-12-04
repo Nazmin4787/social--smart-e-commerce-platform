@@ -28,7 +28,9 @@ export const AuthProvider = ({ children }) => {
     
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('accessToken', access);
+    localStorage.setItem('access_token', access); // For compatibility
     localStorage.setItem('refreshToken', refresh);
+    localStorage.setItem('refresh_token', refresh); // For compatibility
   };
 
   const logout = () => {
@@ -38,7 +40,9 @@ export const AuthProvider = ({ children }) => {
     
     localStorage.removeItem('user');
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('access_token');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('refresh_token');
     
     window.location.href = '/';
   };
@@ -49,6 +53,7 @@ export const AuthProvider = ({ children }) => {
       setUser({ ...user, token: newAccessToken });
     }
     localStorage.setItem('accessToken', newAccessToken);
+    localStorage.setItem('access_token', newAccessToken);
   };
 
   return (

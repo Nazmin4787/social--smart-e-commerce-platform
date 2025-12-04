@@ -12,6 +12,31 @@ const Header = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [likedCount, setLikedCount] = useState(0);
+  const [showShopAllDropdown, setShowShopAllDropdown] = useState(false);
+  const [showSkinTypeDropdown, setShowSkinTypeDropdown] = useState(false);
+  const [showSkinConcernDropdown, setShowSkinConcernDropdown] = useState(false);
+  const [showIngredientsDropdown, setShowIngredientsDropdown] = useState(false);
+  
+  // Timeout refs for delayed dropdown closing
+  const shopAllTimeoutRef = React.useRef(null);
+  const skinTypeTimeoutRef = React.useRef(null);
+  const skinConcernTimeoutRef = React.useRef(null);
+  const ingredientsTimeoutRef = React.useRef(null);
+
+  const handleDropdownEnter = (setter, timeoutRef) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setter(true);
+  };
+
+  const handleDropdownLeave = (setter, timeoutRef) => {
+    timeoutRef.current = setTimeout(() => {
+      setter(false);
+    }, 300);
+  };
+  
   useEffect(() => {
     if (user) fetchCart();
   }, [user]);
@@ -111,7 +136,18 @@ const Header = () => {
 
           {/* Header Icons */}
           <div className="header-icons">
-            <button className="header-icon-btn" title="Track Order">
+            <button 
+              className="header-icon-btn track-order-btn" 
+              onClick={() => {
+                if (user) {
+                  navigate('/orders');
+                } else {
+                  alert('Please login to track your orders');
+                  setShowAuthModal(true);
+                }
+              }}
+              title="Track Orders"
+            >
               <i className="fas fa-truck"></i>
             </button>
 
@@ -148,17 +184,265 @@ const Header = () => {
       {/* Navigation Menu */}
       <nav className="main-navigation">
         <div className="nav-container">
-          <div className="nav-item dropdown">
+          <div 
+            className="nav-item dropdown"
+            onMouseEnter={() => handleDropdownEnter(setShowShopAllDropdown, shopAllTimeoutRef)}
+            onMouseLeave={() => handleDropdownLeave(setShowShopAllDropdown, shopAllTimeoutRef)}
+          >
             <span>SHOP ALL <i className="fas fa-chevron-down"></i></span>
+            {showShopAllDropdown && (
+              <div 
+                className="dropdown-menu"
+                onMouseEnter={() => handleDropdownEnter(setShowShopAllDropdown, shopAllTimeoutRef)}
+                onMouseLeave={() => handleDropdownLeave(setShowShopAllDropdown, shopAllTimeoutRef)}
+              >
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowShopAllDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Cleansers
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowShopAllDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Serums
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowShopAllDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Moisturizers
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowShopAllDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Sunscreens
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowShopAllDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Face Masks
+                </div>
+              </div>
+            )}
           </div>
-          <div className="nav-item dropdown">
+          <div 
+            className="nav-item dropdown"
+            onMouseEnter={() => handleDropdownEnter(setShowSkinConcernDropdown, skinConcernTimeoutRef)}
+            onMouseLeave={() => handleDropdownLeave(setShowSkinConcernDropdown, skinConcernTimeoutRef)}
+          >
             <span>SKIN CONCERN <i className="fas fa-chevron-down"></i></span>
+            {showSkinConcernDropdown && (
+              <div 
+                className="dropdown-menu"
+                onMouseEnter={() => handleDropdownEnter(setShowSkinConcernDropdown, skinConcernTimeoutRef)}
+                onMouseLeave={() => handleDropdownLeave(setShowSkinConcernDropdown, skinConcernTimeoutRef)}
+              >
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinConcernDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Acne & Breakouts
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinConcernDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Dark Spots / Pigmentation
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinConcernDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Dryness
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinConcernDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Oiliness
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinConcernDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Wrinkles / Aging
+                </div>
+              </div>
+            )}
           </div>
-          <div className="nav-item dropdown">
+          <div 
+            className="nav-item dropdown"
+            onMouseEnter={() => handleDropdownEnter(setShowIngredientsDropdown, ingredientsTimeoutRef)}
+            onMouseLeave={() => handleDropdownLeave(setShowIngredientsDropdown, ingredientsTimeoutRef)}
+          >
             <span>INGREDIENTS <i className="fas fa-chevron-down"></i></span>
+            {showIngredientsDropdown && (
+              <div 
+                className="dropdown-menu"
+                onMouseEnter={() => handleDropdownEnter(setShowIngredientsDropdown, ingredientsTimeoutRef)}
+                onMouseLeave={() => handleDropdownLeave(setShowIngredientsDropdown, ingredientsTimeoutRef)}
+              >
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowIngredientsDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Niacinamide
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowIngredientsDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Vitamin C
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowIngredientsDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Hyaluronic Acid
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowIngredientsDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Salicylic Acid (BHA)
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowIngredientsDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Retinol
+                </div>
+              </div>
+            )}
           </div>
-          <div className="nav-item dropdown">
+          <div 
+            className="nav-item dropdown"
+            onMouseEnter={() => handleDropdownEnter(setShowSkinTypeDropdown, skinTypeTimeoutRef)}
+            onMouseLeave={() => handleDropdownLeave(setShowSkinTypeDropdown, skinTypeTimeoutRef)}
+          >
             <span>SKIN TYPE <i className="fas fa-chevron-down"></i></span>
+            {showSkinTypeDropdown && (
+              <div 
+                className="dropdown-menu"
+                onMouseEnter={() => handleDropdownEnter(setShowSkinTypeDropdown, skinTypeTimeoutRef)}
+                onMouseLeave={() => handleDropdownLeave(setShowSkinTypeDropdown, skinTypeTimeoutRef)}
+              >
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinTypeDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Oily Skin
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinTypeDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Dry Skin
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinTypeDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Combination Skin
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinTypeDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Sensitive Skin
+                </div>
+                <div className="dropdown-item" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSkinTypeDropdown(false);
+                  navigate('/');
+                  setTimeout(() => {
+                    document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}>
+                  Normal Skin
+                </div>
+              </div>
+            )}
           </div>
           <div className="nav-item">
             <span>BEST SELLERS</span>

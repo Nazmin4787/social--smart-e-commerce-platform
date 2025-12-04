@@ -14,6 +14,13 @@ const ProfilePage = () => {
   const [likedProducts, setLikedProducts] = useState([]);
   const [likedProductsLoading, setLikedProductsLoading] = useState(false);
   const [likedProductIds, setLikedProductIds] = useState([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    bio: ''
+  });
 
   useEffect(() => {
     if (!user) {
@@ -75,6 +82,55 @@ const ProfilePage = () => {
 
   const handleLogout = () => {
     logout();
+  };
+
+  const handleEditClick = () => {
+    setEditForm({
+      name: profile.name || '',
+      email: profile.email || '',
+      phone: profile.phone || '',
+      bio: profile.bio || ''
+    });
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditForm({ name: '', email: '', phone: '', bio: '' });
+  };
+
+  const handleSaveChanges = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('http://localhost:8000/api/profile/update/', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(editForm)
+      });
+
+      if (response.ok) {
+        const updatedProfile = await response.json();
+        setProfile(updatedProfile);
+        setIsEditing(false);
+        alert('Profile updated successfully!');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('Failed to update profile');
+    }
+  };
+
+  const handleFormChange = (e) => {
+    setEditForm({
+      ...editForm,
+      [e.target.name]: e.target.value
+    });
   };
 
   if (loading) {
@@ -155,31 +211,82 @@ const ProfilePage = () => {
             {activeTab === 'profile' && (
               <div className="profile-section">
                 <h2 className="section-heading">My Profile</h2>
-                <div className="profile-details-card">
-                  <div className="profile-detail-row">
-                    <label>Full Name</label>
-                    <span>{profile?.name || 'N/A'}</span>
-                  </div>
-                  <div className="profile-detail-row">
-                    <label>Email Address</label>
-                    <span>{profile?.email || 'N/A'}</span>
-                  </div>
-                  {profile?.bio && (
-                    <div className="profile-detail-row">
-                      <label>Bio</label>
-                      <span>{profile.bio}</span>
+                {isEditing ? (
+                  <div className="profile-edit-card">
+                    <div className="form-field">
+                      <label>Full Name</label>
+                      <input 
+                        type="text" 
+                        name="name" 
+                        value={editForm.name} 
+                        onChange={handleFormChange}
+                        placeholder="Enter your full name"
+                      />
                     </div>
-                  )}
-                  <div className="profile-detail-row">
-                    <label>Phone Number</label>
-                    <span>{profile?.phone || 'Not provided'}</span>
+                    <div className="form-field">
+                      <label>Email Address</label>
+                      <input 
+                        type="email" 
+                        name="email" 
+                        value={editForm.email} 
+                        onChange={handleFormChange}
+                        placeholder="Enter your email"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>Bio</label>
+                      <textarea 
+                        name="bio" 
+                        value={editForm.bio} 
+                        onChange={handleFormChange}
+                        rows="4"
+                        placeholder="Tell us about yourself..."
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>Phone Number</label>
+                      <input 
+                        type="tel" 
+                        name="phone" 
+                        value={editForm.phone} 
+                        onChange={handleFormChange}
+                        placeholder="Enter your phone number"
+                      />
+                    </div>
+                    <div className="profile-actions">
+                      <button className="btn-primary" onClick={handleSaveChanges}>Save Changes</button>
+                      <button className="btn-secondary" onClick={handleCancelEdit}>Cancel</button>
+                    </div>
                   </div>
-                  <div className="profile-detail-row">
-                    <label>Member Since</label>
-                    <span>{profile?.date_joined ? new Date(profile.date_joined).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}</span>
+                ) : (
+                  <div className="profile-details-card">
+                    <div className="profile-detail-row">
+                      <label>Full Name</label>
+                      <span>{profile?.name || 'N/A'}</span>
+                    </div>
+                    <div className="profile-detail-row">
+                      <label>Email Address</label>
+                      <span>{profile?.email || 'N/A'}</span>
+                    </div>
+                    {profile?.bio && (
+                      <div className="profile-detail-row">
+                        <label>Bio</label>
+                        <span>{profile.bio}</span>
+                      </div>
+                    )}
+                    <div className="profile-detail-row">
+                      <label>Phone Number</label>
+                      <span>{profile?.phone || 'Not provided'}</span>
+                    </div>
+                    <div className="profile-detail-row">
+                      <label>Member Since</label>
+                      <span>{profile?.date_joined ? new Date(profile.date_joined).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}</span>
+                    </div>
+                    <div className="profile-actions">
+                      <button className="btn-primary" onClick={handleEditClick}>Edit Profile</button>
+                    </div>
                   </div>
-                  <button className="btn-primary" style={{marginTop: '1rem'}}>Edit Profile</button>
-                </div>
+                )}
               </div>
             )}
 
