@@ -1,11 +1,97 @@
 import axios from 'axios';
 
 const API_BASE = 'http://localhost:8000/api';
+export const API_URL = API_BASE;
 
 // Helper function to get auth headers
 const getAuthHeaders = (token) => ({
   headers: { 'Authorization': `Bearer ${token}` }
 });
+
+// Setup axios interceptor for automatic token refresh
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  
+  failedQueue = [];
+};
+
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Check if it's a 401 error and we haven't retried yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const errorMessage = error.response?.data?.error || '';
+      
+      // Only try to refresh if it's a token expiration issue
+      if (errorMessage.includes('expired') || errorMessage.includes('Invalid token')) {
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          }).then(token => {
+            originalRequest.headers['Authorization'] = 'Bearer ' + token;
+            return axios(originalRequest);
+          }).catch(err => {
+            return Promise.reject(err);
+          });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        const refreshToken = localStorage.getItem('refreshToken') || localStorage.getItem('refresh_token');
+        
+        if (!refreshToken) {
+          // No refresh token, logout user
+          localStorage.clear();
+          window.location.href = '/';
+          return Promise.reject(error);
+        }
+
+        try {
+          const response = await axios.post(`${API_BASE}/auth/refresh/`, {
+            refresh_token: refreshToken
+          });
+          
+          const { access_token } = response.data;
+          
+          // Update tokens in localStorage
+          localStorage.setItem('accessToken', access_token);
+          localStorage.setItem('access_token', access_token);
+          
+          // Update the original request with new token
+          originalRequest.headers['Authorization'] = 'Bearer ' + access_token;
+          
+          processQueue(null, access_token);
+          
+          return axios(originalRequest);
+        } catch (refreshError) {
+          processQueue(refreshError, null);
+          
+          // Refresh failed, logout user
+          localStorage.clear();
+          window.location.href = '/';
+          
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
+        }
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // Products
 export async function fetchProducts() {
