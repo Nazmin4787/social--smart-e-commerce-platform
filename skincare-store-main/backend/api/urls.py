@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     path('products/', views.list_products),
     path('products/create/', views.create_product),
+    path('products/share/', views.share_product),  # MUST come before <str:product_id>
     path('products/<str:product_id>/', views.get_product),
     path('auth/register/', views.register),
     path('auth/login/', views.login),
@@ -61,4 +62,34 @@ urlpatterns = [
     # Reviews
     path('products/<int:product_id>/reviews/', views.get_reviews),
     path('products/<int:product_id>/reviews/create/', views.add_review),
+    
+    # ========== SOCIAL FEATURES ==========
+    # Follow/Unfollow
+    path('social/follow/<int:user_id>/', views.follow_user),
+    path('social/unfollow/<int:user_id>/', views.unfollow_user),
+    
+    # Followers & Following
+    path('social/followers/<int:user_id>/', views.get_followers),
+    path('social/following/<int:user_id>/', views.get_following),
+    path('social/users/<int:user_id>/mutual-followers/', views.get_mutual_followers),
+    
+    # User Profile & Discovery
+    path('social/users/<int:user_id>/profile/', views.get_user_profile_social),
+    path('social/users/search/', views.search_users),
+    path('social/users/suggested/', views.get_suggested_users),
+    
+    # Notifications
+    path('social/notifications/', views.get_notifications),
+    path('social/notifications/<int:notification_id>/read/', views.mark_notification_read),
+    path('social/notifications/mark-all-read/', views.mark_all_notifications_read),
+    path('social/notifications/unread-count/', views.get_unread_notifications_count),
+    
+    # Chat / Messaging
+    path('chat/conversations/', views.get_conversations),
+    path('chat/conversations/<int:other_user_id>/', views.get_or_create_conversation),
+    path('chat/messages/<int:conversation_id>/', views.get_messages),
+    path('chat/messages/<int:conversation_id>/send/', views.send_message),
+    path('chat/messages/<int:message_id>/edit/', views.edit_message),
+    path('chat/messages/<int:message_id>/delete/', views.delete_message),
+    path('chat/unread-count/', views.get_unread_messages_count),
 ]

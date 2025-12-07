@@ -4,6 +4,7 @@ import Hero from '../components/Hero';
 import CategorySection from '../components/CategorySection';
 import ProductsSection from '../components/ProductsSection';
 import AboutSection from '../components/AboutSection';
+import SuggestedUsers from '../components/SuggestedUsers';
 
 const HomePage = () => {
   return (
@@ -14,6 +15,7 @@ const HomePage = () => {
         <CategorySection />
         <ProductsSection title="Featured Products" limit={50} />
         <ProductsSection title="Trending Products" limit={20} isTrending={true} />
+        <SuggestedUsers />
         <AboutSection />
       </main>
       <footer className="footer">

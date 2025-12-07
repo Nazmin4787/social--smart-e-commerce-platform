@@ -274,3 +274,18 @@ export async function deleteProduct(token, productId) {
 export async function getProductById(productId) {
   return axios.get(`${API_BASE}/products/${productId}/`).then(r => r.data);
 }
+
+// ============================================================================
+// PRODUCT SHARING
+// ============================================================================
+export async function shareProduct(token, productId, recipientId, message) {
+  return axios.post(
+    `${API_BASE}/products/share/`,
+    {
+      product_id: productId,
+      recipient_id: recipientId,
+      message: message
+    },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}

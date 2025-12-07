@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { getProfile, getLikedProducts, likeProduct, addToCart } from '../api';
+import { getUserProfile, getFollowers, getFollowing } from '../api/socialApi';
 import Header from '../components/Header';
 import ProductCard from '../components/ProductCard';
 
@@ -15,6 +16,10 @@ const ProfilePage = () => {
   const [likedProductsLoading, setLikedProductsLoading] = useState(false);
   const [likedProductIds, setLikedProductIds] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [socialStats, setSocialStats] = useState(null);
+  const [followers, setFollowers] = useState([]);
+  const [following, setFollowing] = useState([]);
+  const [socialLoading, setSocialLoading] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     email: '',
@@ -30,6 +35,8 @@ const ProfilePage = () => {
     fetchProfile();
     if (activeTab === 'liked') {
       fetchLikedProducts();
+    } else if (activeTab === 'social') {
+      fetchSocialData();
     }
   }, [user, navigate, activeTab]);
 
@@ -37,6 +44,9 @@ const ProfilePage = () => {
     try {
       const data = await getProfile(user.token);
       setProfile(data);
+      // Fetch social stats
+      const socialData = await getUserProfile(user.token, user.id);
+      setSocialStats(socialData);
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
@@ -56,6 +66,23 @@ const ProfilePage = () => {
       setLikedProducts([]);
     } finally {
       setLikedProductsLoading(false);
+    }
+  };
+
+  const fetchSocialData = async () => {
+    setSocialLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const [followersData, followingData] = await Promise.all([
+        getFollowers(user.id, 1, token),
+        getFollowing(user.id, 1, token)
+      ]);
+      setFollowers(followersData.followers);
+      setFollowing(followingData.following);
+    } catch (error) {
+      console.error('Error fetching social data:', error);
+    } finally {
+      setSocialLoading(false);
     }
   };
 
@@ -158,6 +185,26 @@ const ProfilePage = () => {
               </div>
               <h3>{profile?.name}</h3>
               <p>{profile?.email}</p>
+              {socialStats && (
+                <div className="profile-social-stats">
+                  <div 
+                    className="stat-item" 
+                    onClick={() => navigate(`/users/${user.id}/followers`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="stat-number">{socialStats.followers_count}</div>
+                    <div className="stat-label">Followers</div>
+                  </div>
+                  <div 
+                    className="stat-item" 
+                    onClick={() => navigate(`/users/${user.id}/following`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="stat-number">{socialStats.following_count}</div>
+                    <div className="stat-label">Following</div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <nav className="profile-nav">
@@ -176,6 +223,13 @@ const ProfilePage = () => {
                 <span>My Orders</span>
               </button>
               <button 
+                className={`profile-nav-item ${activeTab === 'track' ? 'active' : ''}`}
+                onClick={() => navigate('/orders')}
+              >
+                <i className="fas fa-truck"></i>
+                <span>Track Orders</span>
+              </button>
+              <button 
                 className={`profile-nav-item ${activeTab === 'addresses' ? 'active' : ''}`}
                 onClick={() => setActiveTab('addresses')}
               >
@@ -189,6 +243,15 @@ const ProfilePage = () => {
                 <i className="fas fa-heart"></i>
                 <span>Liked Products</span>
               </button>
+              {user && !user.is_staff && !user.is_superuser && (
+                <button 
+                  className={`profile-nav-item ${activeTab === 'social' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('social')}
+                >
+                  <i className="fas fa-users"></i>
+                  <span>Followers & Following</span>
+                </button>
+              )}
               <button 
                 className={`profile-nav-item ${activeTab === 'password' ? 'active' : ''}`}
                 onClick={() => setActiveTab('password')}
@@ -341,6 +404,113 @@ const ProfilePage = () => {
                         isLiked={true}
                       />
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'social' && (
+              <div className="profile-section">
+                <h2 className="section-heading">Followers & Following</h2>
+                {socialLoading ? (
+                  <div className="loading-spinner">
+                    <div className="spinner"></div>
+                    <p>Loading...</p>
+                  </div>
+                ) : (
+                  <div className="social-section-content">
+                    {/* Followers Section */}
+                    <div className="social-card">
+                      <div className="social-card-header">
+                        <h3>
+                          <i className="fas fa-user-friends"></i> Followers
+                          <span className="count-badge">{socialStats?.followers_count || 0}</span>
+                        </h3>
+                        {followers.length > 0 && (
+                          <button 
+                            className="view-all-btn" 
+                            onClick={() => navigate(`/users/${user.id}/followers`)}
+                          >
+                            View All <i className="fas fa-arrow-right"></i>
+                          </button>
+                        )}
+                      </div>
+                      <div className="social-users-list">
+                        {followers.length === 0 ? (
+                          <div className="empty-state">
+                            <i className="fas fa-user-slash"></i>
+                            <p>No followers yet</p>
+                          </div>
+                        ) : (
+                          followers.slice(0, 5).map((follower) => (
+                            <div 
+                              key={follower.id} 
+                              className="social-user-item"
+                              onClick={() => navigate(`/users/${follower.id}/profile`)}
+                            >
+                              <div className="social-user-avatar">
+                                <i className="fas fa-user-circle"></i>
+                              </div>
+                              <div className="social-user-info">
+                                <h4>{follower.name}</h4>
+                                <p>{follower.email}</p>
+                              </div>
+                              <i className="fas fa-chevron-right"></i>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Following Section */}
+                    <div className="social-card">
+                      <div className="social-card-header">
+                        <h3>
+                          <i className="fas fa-user-check"></i> Following
+                          <span className="count-badge">{socialStats?.following_count || 0}</span>
+                        </h3>
+                        {following.length > 0 && (
+                          <button 
+                            className="view-all-btn" 
+                            onClick={() => navigate(`/users/${user.id}/following`)}
+                          >
+                            View All <i className="fas fa-arrow-right"></i>
+                          </button>
+                        )}
+                      </div>
+                      <div className="social-users-list">
+                        {following.length === 0 ? (
+                          <div className="empty-state">
+                            <i className="fas fa-user-times"></i>
+                            <p>Not following anyone yet</p>
+                            <button 
+                              className="btn-primary" 
+                              onClick={() => navigate('/search/users')}
+                              style={{ marginTop: '1rem', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                            >
+                              Find Users
+                            </button>
+                          </div>
+                        ) : (
+                          following.slice(0, 5).map((followedUser) => (
+                            <div 
+                              key={followedUser.id} 
+                              className="social-user-item"
+                              onClick={() => navigate(`/users/${followedUser.id}/profile`)}
+                            >
+                              <div className="social-user-avatar">
+                                <i className="fas fa-user-circle"></i>
+                              </div>
+                              <div className="social-user-info">
+                                <h4>{followedUser.name}</h4>
+                                <p>{followedUser.email}</p>
+                              </div>
+                              <i className="fas fa-chevron-right"></i>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

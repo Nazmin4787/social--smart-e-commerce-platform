@@ -4,6 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import { login as apiLogin, register as apiRegister, fetchProducts, addToCart } from '../api';
 import AuthModal from './AuthModal';
 import { CartContext } from '../context/CartContext';
+import NotificationBell from './NotificationBell';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -136,25 +137,26 @@ const Header = () => {
 
           {/* Header Icons */}
           <div className="header-icons">
-            <button 
-              className="header-icon-btn track-order-btn" 
-              onClick={() => {
-                if (user) {
-                  navigate('/orders');
-                } else {
-                  alert('Please login to track your orders');
-                  setShowAuthModal(true);
-                }
-              }}
-              title="Track Orders"
-            >
-              <i className="fas fa-truck"></i>
-            </button>
+            {user && !user.is_staff && !user.is_superuser && (
+              <button className="header-icon-btn" onClick={() => navigate('/social')} title="Social">
+                <i className="fas fa-users"></i>
+              </button>
+            )}
 
-            <button className="header-icon-btn" onClick={() => navigate('/cart')} title="Cart">
-              <i className="fas fa-shopping-bag"></i>
-              {cartCount > 0 && <span className="icon-badge">{cartCount}</span>}
-            </button>
+            {user && !user.is_staff && !user.is_superuser && (
+              <button className="header-icon-btn" onClick={() => navigate('/messages')} title="Messages">
+                <i className="fas fa-comment-dots"></i>
+              </button>
+            )}
+
+            {user && !user.is_staff && !user.is_superuser && <NotificationBell />}
+
+            {user && !user.is_staff && !user.is_superuser && (
+              <button className="header-icon-btn" onClick={() => navigate('/cart')} title="Cart">
+                <i className="fas fa-shopping-bag"></i>
+                {cartCount > 0 && <span className="icon-badge">{cartCount}</span>}
+              </button>
+            )}
 
             <button className="header-icon-btn" onClick={handleProfileClick} title={user ? user.name : 'Login'}>
               <i className="fas fa-user"></i>

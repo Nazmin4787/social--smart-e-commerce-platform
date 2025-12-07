@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
+import ShareButton from './ShareButton';
 
 const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
   const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
   
   // Helper to get full image URL
   const getImageUrl = (imagePath) => {
@@ -40,16 +43,21 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
           </div>
         )}
         
-        <button
-          className={`like-btn ${isLiked ? 'liked' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onLike(product.id);
-          }}
-          aria-label="Like product"
-        >
-          <i className={`fas fa-heart ${isLiked ? 'filled' : ''}`}></i>
-        </button>
+        {(!user || (!user.is_staff && !user.is_superuser)) && (
+          <div className="product-action-icons">
+            <button
+              className={`like-btn ${isLiked ? 'liked' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onLike(product.id);
+              }}
+              aria-label="Like product"
+            >
+              <i className={`fas fa-heart ${isLiked ? 'filled' : ''}`}></i>
+            </button>
+            <ShareButton product={product} iconOnly={true} />
+          </div>
+        )}
         
         {product.stock === 0 && (
           <div className="out-of-stock-badge">Out of Stock</div>
@@ -78,17 +86,21 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
               </span>
             )}
           </div>
-          <button
-            className="btn-add-cart"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddToCart(product);
-            }}
-            disabled={product.stock === 0}
-          >
-            <i className="fas fa-shopping-bag"></i>
-            Add to Bag
-          </button>
+          {(!user || (!user.is_staff && !user.is_superuser)) && (
+            <div className="product-actions">
+              <button
+                className="btn-add-cart"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToCart(product);
+                }}
+                disabled={product.stock === 0}
+              >
+                <i className="fas fa-shopping-bag"></i>
+                Add to Bag
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

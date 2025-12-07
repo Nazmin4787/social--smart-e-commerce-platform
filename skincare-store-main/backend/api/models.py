@@ -40,6 +40,28 @@ class AppUser(models.Model):
         """Check if the provided password matches the hashed password."""
         return check_password(raw_password, self.password)
 
+    def get_followers_count(self):
+        """Get the count of users following this user."""
+        return self.followers.count()
+    
+    def get_following_count(self):
+        """Get the count of users this user is following."""
+        return self.following.count()
+    
+    def is_following(self, user_id):
+        """Check if this user is following another user."""
+        return self.following.filter(following_id=user_id).exists()
+    
+    def get_mutual_followers_count(self, other_user_id):
+        """Get count of mutual followers between this user and another user."""
+        # Users that follow both this user and the other user
+        from django.db.models import Count
+        return AppUser.objects.filter(
+            following__following=self
+        ).filter(
+            following__following_id=other_user_id
+        ).count()
+
     def to_dict(self):
         return {
             'id': self.id, 
@@ -49,6 +71,25 @@ class AppUser(models.Model):
             'is_staff': self.is_staff,
             'is_superuser': self.is_superuser
         }
+    
+    def to_profile_dict(self, requesting_user=None):
+        """Return detailed profile with social stats."""
+        profile = {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'bio': self.bio,
+            'followers_count': self.get_followers_count(),
+            'following_count': self.get_following_count(),
+            'is_following': False,
+            'mutual_followers_count': 0,
+        }
+        
+        if requesting_user and requesting_user.id != self.id:
+            profile['is_following'] = requesting_user.is_following(self.id)
+            profile['mutual_followers_count'] = requesting_user.get_mutual_followers_count(self.id)
+        
+        return profile
 
 
 class Cart(models.Model):
@@ -235,3 +276,270 @@ def Product_average_rating(self):
     return product_average_rating(self)
 
 Product.average_rating = Product_average_rating
+
+
+class UserFollow(models.Model):
+    """Model to track user follow relationships (Instagram-style)."""
+    follower = models.ForeignKey(
+        AppUser, 
+        on_delete=models.CASCADE, 
+        related_name='following',
+        help_text="User who is following"
+    )
+    following = models.ForeignKey(
+        AppUser, 
+        on_delete=models.CASCADE, 
+        related_name='followers',
+        help_text="User being followed"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('follower', 'following')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['follower', 'following']),
+            models.Index(fields=['following']),
+            models.Index(fields=['follower']),
+        ]
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'follower': self.follower.to_dict(),
+            'following': self.following.to_dict(),
+            'created_at': self.created_at.isoformat(),
+        }
+    
+    def __str__(self):
+        return f"{self.follower.name} follows {self.following.name}"
+
+
+class Notification(models.Model):
+    """Model to track social notifications."""
+    NOTIFICATION_TYPES = [
+        ('follow', 'Follow'),
+    ]
+    
+    user = models.ForeignKey(
+        AppUser, 
+        on_delete=models.CASCADE, 
+        related_name='notifications',
+        help_text="User receiving the notification"
+    )
+    actor = models.ForeignKey(
+        AppUser, 
+        on_delete=models.CASCADE, 
+        related_name='actions',
+        help_text="User who performed the action"
+    )
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'actor': {
+                'id': self.actor.id,
+                'name': self.actor.name,
+                'email': self.actor.email,
+                'bio': self.actor.bio,
+            },
+            'notification_type': self.notification_type,
+            'message': self.message,
+            'is_read': self.is_read,
+            'created_at': self.created_at.isoformat(),
+        }
+    
+    def __str__(self):
+        return f"{self.notification_type}: {self.actor.name} -> {self.user.name}"
+
+
+# ============================================================================
+# CHAT MODELS
+# ============================================================================
+
+class Conversation(models.Model):
+    """Model for chat conversations between two users."""
+    user1 = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name='conversations_as_user1'
+    )
+    user2 = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name='conversations_as_user2'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('user1', 'user2')
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['user1', 'user2']),
+            models.Index(fields=['-updated_at']),
+        ]
+    
+    def get_other_user(self, current_user_id):
+        """Get the other user in the conversation."""
+        return self.user2 if self.user1.id == current_user_id else self.user1
+    
+    def get_last_message(self):
+        """Get the last message in this conversation."""
+        return self.messages.first()
+    
+    def to_dict(self, current_user_id):
+        """Convert conversation to dictionary."""
+        other_user = self.get_other_user(current_user_id)
+        last_message = self.get_last_message()
+        unread_count = self.messages.filter(is_read=False).exclude(sender_id=current_user_id).count()
+        
+        return {
+            'id': self.id,
+            'other_user': {
+                'id': other_user.id,
+                'name': other_user.name,
+                'email': other_user.email,
+            },
+            'last_message': last_message.to_dict() if last_message else None,
+            'unread_count': unread_count,
+            'updated_at': self.updated_at.isoformat(),
+            'created_at': self.created_at.isoformat(),
+        }
+
+
+class Message(models.Model):
+    """Model for individual messages in a conversation."""
+    MESSAGE_TYPE_CHOICES = [
+        ('text', 'Text'),
+        ('product', 'Product Share'),
+    ]
+    
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    sender = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name='sent_messages'
+    )
+    content = models.TextField()
+    message_type = models.CharField(
+        max_length=20,
+        choices=MESSAGE_TYPE_CHOICES,
+        default='text'
+    )
+    shared_product = models.ForeignKey(
+        'Product',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='shared_in_messages'
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['conversation', '-created_at']),
+            models.Index(fields=['sender']),
+            models.Index(fields=['is_read']),
+        ]
+    
+    def to_dict(self):
+        """Convert message to dictionary."""
+        message_dict = {
+            'id': self.id,
+            'conversation_id': self.conversation.id,
+            'sender': {
+                'id': self.sender.id,
+                'name': self.sender.name,
+            },
+            'content': self.content,
+            'message_type': self.message_type,
+            'is_read': self.is_read,
+            'created_at': self.created_at.isoformat(),
+        }
+        
+        # Include product details if this is a product share
+        if self.message_type == 'product' and self.shared_product:
+            message_dict['shared_product'] = {
+                'id': self.shared_product.id,
+                'title': self.shared_product.title,
+                'price': float(self.shared_product.price),
+                'images': self.shared_product.images,
+                'stock': self.shared_product.stock,
+            }
+        
+        return message_dict
+
+
+# ============================================================================
+# PRODUCT SHARE MODEL
+# ============================================================================
+
+class ProductShare(models.Model):
+    """Model for sharing products between users."""
+    product = models.ForeignKey(
+        'Product',
+        on_delete=models.CASCADE,
+        related_name='shares'
+    )
+    sender = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name='shared_products'
+    )
+    recipient = models.ForeignKey(
+        AppUser,
+        on_delete=models.CASCADE,
+        related_name='received_shares'
+    )
+    message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_viewed = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', '-created_at']),
+            models.Index(fields=['sender']),
+            models.Index(fields=['product']),
+        ]
+    
+    def to_dict(self):
+        """Convert share to dictionary."""
+        return {
+            'id': self.id,
+            'product': {
+                'id': self.product.id,
+                'title': self.product.title,
+                'price': float(self.product.price),
+                'images': self.product.images,
+            },
+            'sender': {
+                'id': self.sender.id,
+                'name': self.sender.name,
+            },
+            'recipient': {
+                'id': self.recipient.id,
+                'name': self.recipient.name,
+            },
+            'message': self.message,
+            'is_viewed': self.is_viewed,
+            'created_at': self.created_at.isoformat(),
+        }

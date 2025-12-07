@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Banner
+from .models import Banner, UserFollow, Notification, ProductShare
 from .models import Order, OrderItem, Address
 
 
@@ -57,3 +57,72 @@ class BannerAdmin(admin.ModelAdmin):
         return ''
 
     image_preview.short_description = 'Image'
+
+
+@admin.register(UserFollow)
+class UserFollowAdmin(admin.ModelAdmin):
+    list_display = ('id', 'follower_name', 'following_name', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('follower__name', 'follower__email', 'following__name', 'following__email')
+    ordering = ('-created_at',)
+    readonly_fields = ('follower', 'following', 'created_at')
+    
+    def follower_name(self, obj):
+        return f"{obj.follower.name} ({obj.follower.email})"
+    
+    def following_name(self, obj):
+        return f"{obj.following.name} ({obj.following.email})"
+    
+    follower_name.short_description = 'Follower'
+    following_name.short_description = 'Following'
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user_name', 'actor_name', 'notification_type', 'is_read', 'created_at')
+    list_filter = ('notification_type', 'is_read', 'created_at')
+    search_fields = ('user__name', 'user__email', 'actor__name', 'actor__email', 'message')
+    ordering = ('-created_at',)
+    readonly_fields = ('user', 'actor', 'notification_type', 'message', 'created_at')
+    actions = ['mark_as_read', 'mark_as_unread']
+    
+    def user_name(self, obj):
+        return f"{obj.user.name} ({obj.user.email})"
+    
+    def actor_name(self, obj):
+        return f"{obj.actor.name} ({obj.actor.email})"
+    
+    def mark_as_read(self, request, queryset):
+        updated = queryset.update(is_read=True)
+        self.message_user(request, f"{updated} notifications marked as read.")
+    
+    def mark_as_unread(self, request, queryset):
+        updated = queryset.update(is_read=False)
+        self.message_user(request, f"{updated} notifications marked as unread.")
+    
+    user_name.short_description = 'User'
+    actor_name.short_description = 'Actor'
+    mark_as_read.short_description = "Mark selected as read"
+    mark_as_unread.short_description = "Mark selected as unread"
+
+
+@admin.register(ProductShare)
+class ProductShareAdmin(admin.ModelAdmin):
+    list_display = ('id', 'product_title', 'sender_name', 'recipient_name', 'is_viewed', 'created_at')
+    list_filter = ('is_viewed', 'created_at')
+    search_fields = ('product__title', 'sender__name', 'sender__email', 'recipient__name', 'recipient__email', 'message')
+    ordering = ('-created_at',)
+    readonly_fields = ('product', 'sender', 'recipient', 'message', 'created_at')
+    
+    def product_title(self, obj):
+        return obj.product.title
+    
+    def sender_name(self, obj):
+        return f"{obj.sender.name} ({obj.sender.email})"
+    
+    def recipient_name(self, obj):
+        return f"{obj.recipient.name} ({obj.recipient.email})"
+    
+    product_title.short_description = 'Product'
+    sender_name.short_description = 'Sender'
+    recipient_name.short_description = 'Recipient'

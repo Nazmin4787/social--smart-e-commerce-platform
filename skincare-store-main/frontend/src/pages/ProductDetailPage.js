@@ -2,6 +2,7 @@ import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { fetchProducts, addToCart, getReviews, addReview } from '../api';
+import ShareButton from '../components/ShareButton';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -114,6 +115,11 @@ const ProductDetailPage = () => {
                 className="main-image"
                 onError={() => setImageError(true)}
               />
+              {user && !user.is_staff && !user.is_superuser && (
+                <div className="product-detail-action-icons">
+                  <ShareButton product={product} iconOnly={true} />
+                </div>
+              )}
             </div>
             {productImages.length > 1 && (
               <div className="product-thumbnails">

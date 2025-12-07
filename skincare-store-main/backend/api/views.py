@@ -15,6 +15,9 @@ from .models import (
     Booking,
     Review,
     Banner,
+    UserFollow,
+    Notification,
+    ProductShare,
 )
 from .validators import (
     validate_user_registration, 
@@ -25,6 +28,7 @@ from .validators import (
     validate_password,
     validate_name
 )
+from .permissions import IsRegularUser
 
 
 def jsonify_python(obj, status=200):
@@ -201,6 +205,7 @@ def login(request):
 def add_to_cart(request):
     if request.method != "POST":
         return HttpResponseBadRequest()
+    
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     data = decode_jwt(token)
     
@@ -211,6 +216,14 @@ def add_to_cart(request):
     
     body = json.loads(request.body)
     user_id = data["user_id"]
+    
+    # Block admin user from shopping
+    try:
+        user = AppUser.objects.get(pk=user_id)
+        if user.is_staff and user.is_superuser:
+            return JsonResponse({"error": "Admin users cannot add items to cart."}, status=403)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
     
     # Validate quantity
     qty = body.get("qty", 1)
@@ -359,6 +372,8 @@ def create_booking(request):
 
     try:
         user = AppUser.objects.get(pk=user_id)
+        if user.is_staff and user.is_superuser:
+            return JsonResponse({"error": "Admin users cannot create bookings."}, status=403)
     except AppUser.DoesNotExist:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
@@ -448,6 +463,8 @@ def add_review(request, product_id):
     user_id = data["user_id"]
     try:
         user = AppUser.objects.get(pk=user_id)
+        if user.is_staff and user.is_superuser:
+            return JsonResponse({"error": "Admin users cannot add reviews."}, status=403)
     except AppUser.DoesNotExist:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
@@ -481,6 +498,7 @@ def get_reviews(request, product_id):
 def create_order(request):
     if request.method != "POST":
         return HttpResponseBadRequest()
+    
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     data = decode_jwt(token)
     
@@ -493,6 +511,8 @@ def create_order(request):
     user_id = data["user_id"]
     try:
         user = AppUser.objects.get(pk=user_id)
+        if user.is_staff and user.is_superuser:
+            return JsonResponse({"error": "Admin users cannot create orders."}, status=403)
     except AppUser.DoesNotExist:
         return JsonResponse({"error": "Unauthorized"}, status=401)
     
@@ -896,6 +916,8 @@ def like_product(request):
     
     try:
         user = AppUser.objects.get(pk=data["user_id"])
+        if user.is_staff and user.is_superuser:
+            return JsonResponse({"error": "Admin users cannot like products."}, status=403)
     except AppUser.DoesNotExist:
         return JsonResponse({"error": "User not found"}, status=404)
     
@@ -1576,3 +1598,881 @@ def admin_banners(request):
             return JsonResponse({"error": "Banner not found"}, status=404)
 
     return HttpResponseBadRequest()
+
+
+# ============================================================================
+# SOCIAL FEATURES - Follow/Unfollow System
+# ============================================================================
+
+@csrf_exempt
+def follow_user(request, user_id):
+    """Follow a user - creates follow relationship and notification."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+        if current_user.is_staff and current_user.is_superuser:
+            return JsonResponse({"error": "Admin users cannot follow other users."}, status=403)
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get user to follow
+    try:
+        user_to_follow = AppUser.objects.get(pk=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Prevent self-follow
+    if current_user.id == user_to_follow.id:
+        return JsonResponse({"error": "You cannot follow yourself"}, status=400)
+    
+    # Check if already following
+    if UserFollow.objects.filter(follower=current_user, following=user_to_follow).exists():
+        return JsonResponse({"error": "Already following this user"}, status=400)
+    
+    # Create follow relationship
+    UserFollow.objects.create(follower=current_user, following=user_to_follow)
+    
+    # Create notification
+    Notification.objects.create(
+        user=user_to_follow,
+        actor=current_user,
+        notification_type='follow',
+        message=f'{current_user.name} started following you'
+    )
+    
+    return JsonResponse({
+        "message": f"You are now following {user_to_follow.name}",
+        "followers_count": user_to_follow.get_followers_count(),
+        "following_count": current_user.get_following_count()
+    })
+
+
+@csrf_exempt
+def unfollow_user(request, user_id):
+    """Unfollow a user - removes follow relationship."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+        if current_user.is_staff and current_user.is_superuser:
+            return JsonResponse({"error": "Admin users cannot unfollow other users."}, status=403)
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get user to unfollow
+    try:
+        user_to_unfollow = AppUser.objects.get(pk=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Check if following exists
+    try:
+        follow = UserFollow.objects.get(follower=current_user, following=user_to_unfollow)
+        follow.delete()
+    except UserFollow.DoesNotExist:
+        return JsonResponse({"error": "You are not following this user"}, status=400)
+    
+    return JsonResponse({
+        "message": f"You unfollowed {user_to_unfollow.name}",
+        "followers_count": user_to_unfollow.get_followers_count(),
+        "following_count": current_user.get_following_count()
+    })
+
+
+@csrf_exempt
+def get_followers(request, user_id):
+    """Get list of users following the specified user."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user (optional for public profiles)
+    current_user = None
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            payload = decode_jwt(token)
+            current_user = AppUser.objects.get(pk=payload['user_id'])
+        except Exception:
+            pass
+    
+    # Get target user
+    try:
+        target_user = AppUser.objects.get(pk=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Get followers with pagination
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    offset = (page - 1) * page_size
+    
+    followers = UserFollow.objects.filter(following=target_user).select_related('follower')[offset:offset + page_size]
+    total_count = UserFollow.objects.filter(following=target_user).count()
+    
+    followers_data = []
+    for follow in followers:
+        follower = follow.follower
+        follower_data = follower.to_profile_dict(requesting_user=current_user)
+        followers_data.append(follower_data)
+    
+    return JsonResponse({
+        "followers": followers_data,
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "has_more": total_count > offset + page_size
+    })
+
+
+@csrf_exempt
+def get_following(request, user_id):
+    """Get list of users that the specified user follows."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user (optional for public profiles)
+    current_user = None
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            payload = decode_jwt(token)
+            current_user = AppUser.objects.get(pk=payload['user_id'])
+        except Exception:
+            pass
+    
+    # Get target user
+    try:
+        target_user = AppUser.objects.get(pk=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Get following with pagination
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    offset = (page - 1) * page_size
+    
+    following = UserFollow.objects.filter(follower=target_user).select_related('following')[offset:offset + page_size]
+    total_count = UserFollow.objects.filter(follower=target_user).count()
+    
+    following_data = []
+    for follow in following:
+        followed_user = follow.following
+        followed_data = followed_user.to_profile_dict(requesting_user=current_user)
+        following_data.append(followed_data)
+    
+    return JsonResponse({
+        "following": following_data,
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "has_more": total_count > offset + page_size
+    })
+
+
+@csrf_exempt
+def get_user_profile_social(request, user_id):
+    """Get detailed user profile with social stats."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user (optional)
+    current_user = None
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            payload = decode_jwt(token)
+            current_user = AppUser.objects.get(pk=payload['user_id'])
+        except Exception:
+            pass
+    
+    # Get target user
+    try:
+        target_user = AppUser.objects.get(pk=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Get profile with social stats
+    profile = target_user.to_profile_dict(requesting_user=current_user)
+    
+    # Add liked products count
+    profile['liked_products_count'] = target_user.liked_products.count()
+    
+    return JsonResponse(profile)
+
+
+@csrf_exempt
+def search_users(request):
+    """Search for users by name or email."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user (optional)
+    current_user = None
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            payload = decode_jwt(token)
+            current_user = AppUser.objects.get(pk=payload['user_id'])
+        except Exception:
+            pass
+    
+    # Get search query
+    query = request.GET.get('q', '').strip()
+    if not query or len(query) < 2:
+        return JsonResponse({"error": "Search query must be at least 2 characters"}, status=400)
+    
+    # Search users
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    offset = (page - 1) * page_size
+    
+    users = AppUser.objects.filter(
+        models.Q(name__icontains=query) | models.Q(email__icontains=query)
+    )[offset:offset + page_size]
+    
+    total_count = AppUser.objects.filter(
+        models.Q(name__icontains=query) | models.Q(email__icontains=query)
+    ).count()
+    
+    users_data = []
+    for user in users:
+        # Exclude current user from results
+        if current_user and user.id == current_user.id:
+            continue
+        user_data = user.to_profile_dict(requesting_user=current_user)
+        users_data.append(user_data)
+    
+    return JsonResponse({
+        "users": users_data,
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "has_more": total_count > offset + page_size
+    })
+
+
+@csrf_exempt
+def get_suggested_users(request):
+    """Get suggested users to follow."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get users that current user is NOT following
+    following_ids = UserFollow.objects.filter(follower=current_user).values_list('following_id', flat=True)
+    
+    # Get users with most followers (excluding already followed and self)
+    suggested_users = AppUser.objects.exclude(
+        id__in=list(following_ids) + [current_user.id]
+    ).annotate(
+        followers_count=models.Count('followers')
+    ).order_by('-followers_count')[:20]
+    
+    users_data = []
+    for user in suggested_users:
+        user_data = user.to_profile_dict(requesting_user=current_user)
+        users_data.append(user_data)
+    
+    return JsonResponse({"suggested_users": users_data})
+
+
+@csrf_exempt
+def get_mutual_followers(request, user_id):
+    """Get mutual followers between current user and specified user."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get target user
+    try:
+        target_user = AppUser.objects.get(pk=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Get mutual followers (users following both current_user and target_user)
+    current_follower_ids = UserFollow.objects.filter(following=current_user).values_list('follower_id', flat=True)
+    target_follower_ids = UserFollow.objects.filter(following=target_user).values_list('follower_id', flat=True)
+    
+    mutual_ids = set(current_follower_ids).intersection(set(target_follower_ids))
+    
+    mutual_users = AppUser.objects.filter(id__in=mutual_ids)
+    
+    users_data = []
+    for user in mutual_users:
+        user_data = user.to_profile_dict(requesting_user=current_user)
+        users_data.append(user_data)
+    
+    return JsonResponse({
+        "mutual_followers": users_data,
+        "count": len(users_data)
+    })
+
+
+# ============================================================================
+# NOTIFICATIONS
+# ============================================================================
+
+@csrf_exempt
+def get_notifications(request):
+    """Get user's notifications."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Filter by read status if specified
+    is_read = request.GET.get('is_read')
+    notifications_query = Notification.objects.filter(user=current_user)
+    
+    if is_read is not None:
+        is_read_bool = is_read.lower() == 'true'
+        notifications_query = notifications_query.filter(is_read=is_read_bool)
+    
+    # Pagination
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    offset = (page - 1) * page_size
+    
+    notifications = notifications_query.select_related('actor')[offset:offset + page_size]
+    total_count = notifications_query.count()
+    
+    notifications_data = [notif.to_dict() for notif in notifications]
+    
+    return JsonResponse({
+        "notifications": notifications_data,
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "has_more": total_count > offset + page_size
+    })
+
+
+@csrf_exempt
+def mark_notification_read(request, notification_id):
+    """Mark a specific notification as read."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get notification
+    try:
+        notification = Notification.objects.get(pk=notification_id, user=current_user)
+        notification.is_read = True
+        notification.save()
+        
+        unread_count = Notification.objects.filter(user=current_user, is_read=False).count()
+        
+        return JsonResponse({
+            "message": "Notification marked as read",
+            "unread_count": unread_count
+        })
+    except Notification.DoesNotExist:
+        return JsonResponse({"error": "Notification not found"}, status=404)
+
+
+@csrf_exempt
+def mark_all_notifications_read(request):
+    """Mark all user's notifications as read."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Mark all as read
+    updated_count = Notification.objects.filter(user=current_user, is_read=False).update(is_read=True)
+    
+    return JsonResponse({
+        "message": f"{updated_count} notifications marked as read",
+        "unread_count": 0
+    })
+
+
+@csrf_exempt
+def get_unread_notifications_count(request):
+    """Get count of unread notifications."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    unread_count = Notification.objects.filter(user=current_user, is_read=False).count()
+    
+    return JsonResponse({"unread_count": unread_count})
+
+
+# ============================================================================
+# CHAT / MESSAGING ENDPOINTS
+# ============================================================================
+
+@csrf_exempt
+def get_conversations(request):
+    """Get all conversations for the current user."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get all conversations where user is either user1 or user2
+    from django.db.models import Q
+    from api.models import Conversation
+    
+    conversations = Conversation.objects.filter(
+        Q(user1=current_user) | Q(user2=current_user)
+    ).select_related('user1', 'user2')
+    
+    conversations_data = [conv.to_dict(current_user.id) for conv in conversations]
+    
+    return JsonResponse({"conversations": conversations_data})
+
+
+@csrf_exempt
+def get_or_create_conversation(request, other_user_id):
+    """Get or create a conversation with another user."""
+    if request.method not in ['GET', 'POST']:
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get the other user
+    try:
+        other_user = AppUser.objects.get(pk=other_user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Check if both users follow each other
+    from api.models import UserFollow, Conversation
+    
+    user_follows_other = UserFollow.objects.filter(
+        follower=current_user, following=other_user
+    ).exists()
+    other_follows_user = UserFollow.objects.filter(
+        follower=other_user, following=current_user
+    ).exists()
+    
+    if not (user_follows_other and other_follows_user):
+        return JsonResponse({
+            "error": "You can only chat with users who follow you back"
+        }, status=403)
+    
+    # Get or create conversation (ensure user1_id < user2_id for consistency)
+    user1_id = min(current_user.id, other_user.id)
+    user2_id = max(current_user.id, other_user.id)
+    
+    user1 = AppUser.objects.get(pk=user1_id)
+    user2 = AppUser.objects.get(pk=user2_id)
+    
+    conversation, created = Conversation.objects.get_or_create(
+        user1=user1,
+        user2=user2
+    )
+    
+    return JsonResponse({
+        "conversation": conversation.to_dict(current_user.id),
+        "created": created
+    })
+
+
+@csrf_exempt
+def get_messages(request, conversation_id):
+    """Get all messages in a conversation."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    from api.models import Conversation, Message
+    
+    # Get conversation and verify user is part of it
+    try:
+        conversation = Conversation.objects.get(pk=conversation_id)
+    except Conversation.DoesNotExist:
+        return JsonResponse({"error": "Conversation not found"}, status=404)
+    
+    if conversation.user1.id != current_user.id and conversation.user2.id != current_user.id:
+        return JsonResponse({"error": "Access denied"}, status=403)
+    
+    # Get messages with pagination
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 50))
+    offset = (page - 1) * page_size
+    
+    messages = Message.objects.filter(
+        conversation=conversation
+    ).select_related('sender').order_by('created_at')[offset:offset + page_size]
+    
+    total_count = Message.objects.filter(conversation=conversation).count()
+    
+    messages_data = [msg.to_dict() for msg in messages]
+    
+    # Mark messages as read
+    Message.objects.filter(
+        conversation=conversation,
+        is_read=False
+    ).exclude(sender=current_user).update(is_read=True)
+    
+    return JsonResponse({
+        "messages": messages_data,
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "has_more": total_count > offset + page_size
+    })
+
+
+@csrf_exempt
+def send_message(request, conversation_id):
+    """Send a message in a conversation."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    from api.models import Conversation, Message
+    
+    # Get conversation and verify user is part of it
+    try:
+        conversation = Conversation.objects.get(pk=conversation_id)
+    except Conversation.DoesNotExist:
+        return JsonResponse({"error": "Conversation not found"}, status=404)
+    
+    if conversation.user1.id != current_user.id and conversation.user2.id != current_user.id:
+        return JsonResponse({"error": "Access denied"}, status=403)
+    
+    # Get message content
+    body = json.loads(request.body)
+    content = body.get('content', '').strip()
+    
+    if not content:
+        return JsonResponse({"error": "Message content is required"}, status=400)
+    
+    # Create message
+    message = Message.objects.create(
+        conversation=conversation,
+        sender=current_user,
+        content=content
+    )
+    
+    # Update conversation timestamp
+    conversation.save()
+    
+    return JsonResponse({
+        "message": message.to_dict(),
+        "success": True
+    })
+
+
+@csrf_exempt
+def edit_message(request, message_id):
+    """Edit a message."""
+    if request.method != 'PUT':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    from api.models import Message
+    
+    # Get message
+    try:
+        message = Message.objects.get(pk=message_id)
+    except Message.DoesNotExist:
+        return JsonResponse({"error": "Message not found"}, status=404)
+    
+    # Verify user is the sender
+    if message.sender.id != current_user.id:
+        return JsonResponse({"error": "Access denied"}, status=403)
+    
+    # Get new content
+    body = json.loads(request.body)
+    new_content = body.get('content', '').strip()
+    
+    if not new_content:
+        return JsonResponse({"error": "Message content is required"}, status=400)
+    
+    # Update message
+    message.content = new_content
+    message.save()
+    
+    return JsonResponse({
+        "message": message.to_dict(),
+        "success": True
+    })
+
+
+@csrf_exempt
+def delete_message(request, message_id):
+    """Delete a message."""
+    if request.method != 'DELETE':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    from api.models import Message
+    
+    # Get message
+    try:
+        message = Message.objects.get(pk=message_id)
+    except Message.DoesNotExist:
+        return JsonResponse({"error": "Message not found"}, status=404)
+    
+    # Verify user is the sender
+    if message.sender.id != current_user.id:
+        return JsonResponse({"error": "Access denied"}, status=403)
+    
+    # Delete message
+    message.delete()
+    
+    return JsonResponse({
+        "success": True,
+        "message": "Message deleted successfully"
+    })
+
+
+@csrf_exempt
+def get_unread_messages_count(request):
+    """Get count of unread messages."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    from django.db.models import Q
+    from api.models import Conversation, Message
+    
+    # Get all conversations for this user
+    conversations = Conversation.objects.filter(
+        Q(user1=current_user) | Q(user2=current_user)
+    )
+    
+    # Count unread messages across all conversations
+    unread_count = Message.objects.filter(
+        conversation__in=conversations,
+        is_read=False
+    ).exclude(sender=current_user).count()
+    
+    return JsonResponse({"unread_count": unread_count})
+
+
+@csrf_exempt
+def share_product(request):
+    """Share a product with another user."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Check if user can share products (not admin)
+    if current_user.is_staff and current_user.is_superuser:
+        return JsonResponse({"error": "Admins cannot share products"}, status=403)
+    
+    from django.db.models import Q
+    from api.models import Conversation, Message, UserFollow, ProductShare
+    
+    # Get request data
+    body = json.loads(request.body)
+    product_id = body.get('product_id')
+    recipient_id = body.get('recipient_id')
+    message_text = body.get('message', '').strip()
+    
+    print(f"DEBUG share_product: user={current_user.id}, product={product_id}, recipient={recipient_id}")
+    
+    if not product_id or not recipient_id:
+        return JsonResponse({"error": "Product ID and recipient ID are required"}, status=400)
+    
+    # Get product
+    try:
+        product = Product.objects.get(pk=product_id)
+        print(f"DEBUG: Product found: {product.title}")
+    except Product.DoesNotExist:
+        print(f"DEBUG: Product not found: {product_id}")
+        return JsonResponse({"error": "Product not found"}, status=404)
+    
+    # Get recipient
+    try:
+        recipient = AppUser.objects.get(pk=recipient_id)
+        print(f"DEBUG: Recipient found: {recipient.name} ({recipient.email})")
+    except AppUser.DoesNotExist:
+        print(f"DEBUG: Recipient not found: {recipient_id}")
+        return JsonResponse({"error": "Recipient not found"}, status=404)
+    
+    # Verify mutual following
+    following = UserFollow.objects.filter(follower=current_user, following=recipient).exists()
+    followed = UserFollow.objects.filter(follower=recipient, following=current_user).exists()
+    
+    print(f"DEBUG: I follow them: {following}, They follow me: {followed}")
+    
+    if not (following and followed):
+        return JsonResponse({"error": "Can only share with mutual followers"}, status=403)
+    
+    # Create or get conversation
+    conversation = Conversation.objects.filter(
+        Q(user1=current_user, user2=recipient) |
+        Q(user1=recipient, user2=current_user)
+    ).first()
+    
+    if not conversation:
+        conversation = Conversation.objects.create(
+            user1=current_user,
+            user2=recipient
+        )
+    
+    # Create product share message
+    share_message = Message.objects.create(
+        conversation=conversation,
+        sender=current_user,
+        content=message_text or f"Check out this product: {product.title}",
+        message_type='product',
+        shared_product=product
+    )
+    
+    # Create product share record
+    product_share = ProductShare.objects.create(
+        product=product,
+        sender=current_user,
+        recipient=recipient,
+        message=message_text
+    )
+    
+    # Update conversation timestamp
+    conversation.save()
+    
+    return JsonResponse({
+        "success": True,
+        "message": share_message.to_dict(),
+        "share": product_share.to_dict()
+    })
