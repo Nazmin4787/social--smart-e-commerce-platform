@@ -92,4 +92,9 @@ urlpatterns = [
     path('chat/messages/<int:message_id>/edit/', views.edit_message),
     path('chat/messages/<int:message_id>/delete/', views.delete_message),
     path('chat/unread-count/', views.get_unread_messages_count),
+    
+    # Allergy Management
+    path('allergies/check/<int:product_id>/', views.check_product_allergies),
+    path('allergies/check-cart/', views.check_cart_allergies),
+    path('allergies/update/', views.update_user_allergies),
 ]

@@ -149,6 +149,7 @@ def register(request):
     user = AppUser.objects.create(
         name=sanitize_string(body.get("name"), max_length=200),
         email=email,
+        allergies=body.get("allergies", [])
     )
     user.set_password(body.get("password"))
     user.save()
@@ -1495,24 +1496,29 @@ def admin_banners(request):
 
     # List
     if request.method == 'GET':
-        banners = Banner.objects.all().order_by('position', '-created_at')
-        return JsonResponse([b.to_dict(request=request) for b in banners], safe=False)
+        banners = Banner.objects.all().order_by('order', '-created_at')
+        return JsonResponse([b.to_dict() for b in banners], safe=False)
 
     # Create (supports multipart/form-data with `image` file)
     if request.method == 'POST':
         # try to read multipart fields first
         title = None
-        link = ''
+        banner_type = 'featured'
+        description = ''
+        link_url = ''
         is_active = True
-        position = 0
-        if request.content_type.startswith('multipart/'):
+        order = 0
+        
+        if request.content_type and request.content_type.startswith('multipart/'):
             title = request.POST.get('title')
-            link = request.POST.get('link', '')
+            banner_type = request.POST.get('banner_type', 'featured')
+            description = request.POST.get('description', '')
+            link_url = request.POST.get('link_url', '')
             is_active = request.POST.get('is_active', 'true').lower() in ('1', 'true', 'yes')
             try:
-                position = int(request.POST.get('position', 0))
+                order = int(request.POST.get('order', 0))
             except Exception:
-                position = 0
+                order = 0
             image = request.FILES.get('image')
         else:
             try:
@@ -1520,9 +1526,11 @@ def admin_banners(request):
             except Exception:
                 return HttpResponseBadRequest()
             title = body.get('title')
-            link = body.get('link', '')
+            banner_type = body.get('banner_type', 'featured')
+            description = body.get('description', '')
+            link_url = body.get('link_url', '')
             is_active = bool(body.get('is_active', True))
-            position = int(body.get('position', 0))
+            order = int(body.get('order', 0))
             image = None
 
         if not title:
@@ -1530,9 +1538,11 @@ def admin_banners(request):
 
         banner = Banner.objects.create(
             title=title,
-            link=link,
+            banner_type=banner_type,
+            description=description,
+            link_url=link_url,
             is_active=is_active,
-            position=position
+            order=order
         )
         if image:
             # validate image
@@ -1550,7 +1560,7 @@ def admin_banners(request):
                 banner.image = image
             banner.save()
 
-        return JsonResponse({"message": "Banner created", "banner": banner.to_dict(request=request)}, status=201)
+        return JsonResponse({"message": "Banner created", "banner": banner.to_dict()}, status=201)
 
     # Update (PUT) - expects JSON body with 'id'
     if request.method == 'PUT':
@@ -1568,18 +1578,22 @@ def admin_banners(request):
 
         if 'title' in body:
             banner.title = body.get('title')
-        if 'link' in body:
-            banner.link = body.get('link')
+        if 'banner_type' in body:
+            banner.banner_type = body.get('banner_type')
+        if 'description' in body:
+            banner.description = body.get('description')
+        if 'link_url' in body:
+            banner.link_url = body.get('link_url')
         if 'is_active' in body:
             banner.is_active = bool(body.get('is_active'))
-        if 'position' in body:
+        if 'order' in body:
             try:
-                banner.position = int(body.get('position', banner.position))
+                banner.order = int(body.get('order', banner.order))
             except Exception:
                 pass
 
         banner.save()
-        return JsonResponse({"message": "Banner updated", "banner": banner.to_dict(request=request)})
+        return JsonResponse({"message": "Banner updated", "banner": banner.to_dict()})
 
     # Delete
     if request.method == 'DELETE':
@@ -1886,9 +1900,12 @@ def get_suggested_users(request):
     # Get users that current user is NOT following
     following_ids = UserFollow.objects.filter(follower=current_user).values_list('following_id', flat=True)
     
-    # Get users with most followers (excluding already followed and self)
+    # Get users with most followers (excluding already followed, self, and admin users)
     suggested_users = AppUser.objects.exclude(
         id__in=list(following_ids) + [current_user.id]
+    ).filter(
+        is_staff=False,
+        is_superuser=False
     ).annotate(
         followers_count=models.Count('followers')
     ).order_by('-followers_count')[:20]
@@ -2475,4 +2492,223 @@ def share_product(request):
         "success": True,
         "message": share_message.to_dict(),
         "share": product_share.to_dict()
+    })
+
+
+@csrf_exempt
+def check_product_allergies(request, product_id):
+    """Check if a product contains any allergens for the current user."""
+    if request.method != "GET":
+        return HttpResponseBadRequest()
+    
+    # Get current user
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+    
+    payload = decode_jwt(token)
+    if not payload:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        user = AppUser.objects.get(pk=payload["user_id"])
+        product = Product.objects.get(pk=product_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    except Product.DoesNotExist:
+        return JsonResponse({"error": "Product not found"}, status=404)
+    
+    # Check for allergen matches
+    user_allergies = [allergy.lower().strip() for allergy in user.allergies]
+    product_ingredients = [ing.lower().strip() for ing in product.ingredients]
+    
+    allergens_found = []
+    for allergy in user_allergies:
+        for ingredient in product_ingredients:
+            if allergy in ingredient or ingredient in allergy:
+                allergens_found.append(ingredient)
+    
+    has_allergens = len(allergens_found) > 0
+    
+    # Find alternative products if allergens found
+    alternative_products = []
+    if has_allergens:
+        # Find products in same category without the allergens
+        all_products = Product.objects.filter(category=product.category).exclude(pk=product_id)
+        
+        for alt_product in all_products:
+            alt_ingredients = [ing.lower().strip() for ing in alt_product.ingredients]
+            has_user_allergen = False
+            
+            for allergy in user_allergies:
+                for ing in alt_ingredients:
+                    if allergy in ing or ing in allergy:
+                        has_user_allergen = True
+                        break
+                if has_user_allergen:
+                    break
+            
+            if not has_user_allergen:
+                alternative_products.append(alt_product.to_dict())
+                if len(alternative_products) >= 3:  # Limit to 3 alternatives
+                    break
+    
+    return JsonResponse({
+        "has_allergens": has_allergens,
+        "allergens_found": allergens_found,
+        "product": product.to_dict(),
+        "alternatives": alternative_products
+    })
+
+
+@csrf_exempt
+def update_user_allergies(request):
+    """Update user's allergy information."""
+    if request.method != "PUT":
+        return HttpResponseBadRequest()
+    
+    # Get current user
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+
+@csrf_exempt
+def check_cart_allergies(request):
+    """Check if cart items contain any allergens for the current user."""
+    if request.method != "POST":
+        return HttpResponseBadRequest()
+    
+    # Get current user
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+    
+    payload = decode_jwt(token)
+    if not payload:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        user = AppUser.objects.get(pk=payload["user_id"])
+        data = json.loads(request.body)
+        product_ids = data.get("product_ids", [])
+        
+        if not product_ids:
+            return JsonResponse({"error": "No products provided"}, status=400)
+        
+        # Get user allergies
+        user_allergies = [allergy.lower().strip() for allergy in user.allergies]
+        
+        if not user_allergies:
+            return JsonResponse({
+                "has_allergens": False,
+                "products_with_allergens": []
+            })
+        
+        # Check each product for allergens
+        products_with_allergens = []
+        
+        for product_id in product_ids:
+            try:
+                product = Product.objects.get(pk=product_id)
+                product_ingredients = [ing.lower().strip() for ing in product.ingredients]
+                
+                allergens_found = []
+                for allergy in user_allergies:
+                    for ingredient in product_ingredients:
+                        if allergy in ingredient or ingredient in allergy:
+                            if ingredient not in allergens_found:
+                                allergens_found.append(ingredient)
+                
+                if allergens_found:
+                    # Find alternative products
+                    alternative_products = []
+                    all_products = Product.objects.filter(category=product.category).exclude(pk=product_id)
+                    
+                    for alt_product in all_products:
+                        alt_ingredients = [ing.lower().strip() for ing in alt_product.ingredients]
+                        has_user_allergen = False
+                        
+                        for allergy in user_allergies:
+                            for ing in alt_ingredients:
+                                if allergy in ing or ing in allergy:
+                                    has_user_allergen = True
+                                    break
+                            if has_user_allergen:
+                                break
+                        
+                        if not has_user_allergen:
+                            alternative_products.append(alt_product.to_dict())
+                            if len(alternative_products) >= 3:
+                                break
+                    
+                    products_with_allergens.append({
+                        "product": product.to_dict(),
+                        "allergens_found": allergens_found,
+                        "alternatives": alternative_products
+                    })
+            
+            except Product.DoesNotExist:
+                continue
+        
+        return JsonResponse({
+            "has_allergens": len(products_with_allergens) > 0,
+            "products_with_allergens": products_with_allergens
+        })
+        
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+
+@csrf_exempt
+def update_user_allergies(request):
+    """Update user's allergy information."""
+    if request.method != "PUT":
+        return HttpResponseBadRequest()
+    
+    # Get current user
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+    
+    payload = decode_jwt(token)
+    if not payload:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        user = AppUser.objects.get(pk=payload["user_id"])
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    body = json.loads(request.body)
+    allergies = body.get("allergies", [])
+    
+    # Validate and sanitize allergies
+    if not isinstance(allergies, list):
+        return JsonResponse({"error": "Allergies must be a list"}, status=400)
+    
+    sanitized_allergies = [sanitize_string(allergy, max_length=100) for allergy in allergies if allergy]
+    
+    user.allergies = sanitized_allergies
+    user.save()
+    
+    return JsonResponse({
+        "success": True,
+        "user": user.to_dict()
+    })
+
+
+def get_banners(request):
+    """Get active banners, optionally filtered by type"""
+    banner_type = request.GET.get('type', None)
+    
+    banners = Banner.objects.filter(is_active=True)
+    
+    if banner_type:
+        banners = banners.filter(banner_type=banner_type)
+    
+    return JsonResponse({
+        "banners": [banner.to_dict() for banner in banners]
     })

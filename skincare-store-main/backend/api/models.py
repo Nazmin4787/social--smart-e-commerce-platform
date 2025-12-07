@@ -9,6 +9,7 @@ class Product(models.Model):
     stock = models.IntegerField(default=0)
     images = models.JSONField(default=list, blank=True)
     category = models.CharField(max_length=100, default='general')
+    ingredients = models.JSONField(default=list, blank=True)  # List of ingredients
 
     def to_dict(self):
         return {
@@ -19,6 +20,7 @@ class Product(models.Model):
             'stock': self.stock,
             'images': self.images,
             'category': self.category,
+            'ingredients': self.ingredients,
             'average_rating': self.average_rating(),
             'reviews': [r.to_dict() for r in getattr(self, 'reviews_cache', self.reviews.all())[:10]] if hasattr(self, 'reviews') else [],
         }
@@ -29,6 +31,7 @@ class AppUser(models.Model):
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
     bio = models.TextField(blank=True, default='')
+    allergies = models.JSONField(default=list, blank=True)  # List of allergies
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
 
@@ -68,6 +71,7 @@ class AppUser(models.Model):
             'name': self.name, 
             'email': self.email, 
             'bio': self.bio,
+            'allergies': self.allergies,
             'is_staff': self.is_staff,
             'is_superuser': self.is_superuser
         }
@@ -542,4 +546,44 @@ class ProductShare(models.Model):
             'message': self.message,
             'is_viewed': self.is_viewed,
             'created_at': self.created_at.isoformat(),
+        }
+
+
+class Banner(models.Model):
+    """Model for managing homepage banners and promotional images"""
+    BANNER_TYPES = [
+        ('hero', 'Hero Banner'),
+        ('featured', 'Featured Products Banner'),
+        ('category', 'Category Banner'),
+        ('promotional', 'Promotional Banner'),
+    ]
+    
+    title = models.CharField(max_length=255)
+    banner_type = models.CharField(max_length=50, choices=BANNER_TYPES, default='featured')
+    image = models.ImageField(upload_to='banners/', null=True, blank=True)
+    description = models.TextField(blank=True)
+    link_url = models.CharField(max_length=500, blank=True)
+    is_active = models.BooleanField(default=True)
+    order = models.IntegerField(default=0, help_text="Display order (lower numbers appear first)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['order', '-created_at']
+        verbose_name = 'Banner'
+        verbose_name_plural = 'Banners'
+    
+    def __str__(self):
+        return f"{self.title} ({self.get_banner_type_display()})"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'banner_type': self.banner_type,
+            'image': self.image.url if self.image else None,
+            'description': self.description,
+            'link_url': self.link_url,
+            'is_active': self.is_active,
+            'order': self.order,
         }

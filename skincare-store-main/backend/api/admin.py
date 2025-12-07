@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Banner, UserFollow, Notification, ProductShare
-from .models import Order, OrderItem, Address
+from .models import Order, OrderItem, Address, Product, AppUser
 
 
 class OrderItemInline(admin.TabularInline):
@@ -46,17 +46,41 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(Banner)
 class BannerAdmin(admin.ModelAdmin):
-    list_display = ('title', 'is_active', 'position', 'created_at', 'image_preview')
-    list_filter = ('is_active',)
-    search_fields = ('title', 'link')
-    ordering = ('position', '-created_at')
+    list_display = ('title', 'banner_type', 'is_active', 'order', 'created_at', 'image_preview')
+    list_filter = ('is_active', 'banner_type', 'created_at')
+    search_fields = ('title', 'description', 'link_url')
+    ordering = ('order', '-created_at')
+    list_editable = ('is_active', 'order')
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('title', 'banner_type', 'description')
+        }),
+        ('Image', {
+            'fields': ('image', 'image_preview_large')
+        }),
+        ('Settings', {
+            'fields': ('link_url', 'is_active', 'order')
+        }),
+    )
+    
+    readonly_fields = ('image_preview_large', 'created_at', 'updated_at')
 
     def image_preview(self, obj):
         if obj.image:
-            return format_html('<img src="{}" style="max-height:60px;"/>', obj.image.url)
-        return ''
+            return format_html('<img src="{}" style="max-height:60px; border-radius:4px;"/>', obj.image.url)
+        return format_html('<span style="color:#999;">No image</span>')
+    
+    def image_preview_large(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="max-width:500px; max-height:300px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"/>',
+                obj.image.url
+            )
+        return format_html('<p style="color:#999;">No image uploaded</p>')
 
-    image_preview.short_description = 'Image'
+    image_preview.short_description = 'Preview'
+    image_preview_large.short_description = 'Image Preview'
 
 
 @admin.register(UserFollow)
@@ -126,3 +150,76 @@ class ProductShareAdmin(admin.ModelAdmin):
     product_title.short_description = 'Product'
     sender_name.short_description = 'Sender'
     recipient_name.short_description = 'Recipient'
+
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'category', 'price', 'stock', 'ingredient_count', 'created_info')
+    list_filter = ('category', 'stock')
+    search_fields = ('title', 'description', 'category')
+    ordering = ('-id',)
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('title', 'description', 'category')
+        }),
+        ('Pricing & Inventory', {
+            'fields': ('price', 'stock')
+        }),
+        ('Product Images', {
+            'fields': ('images',),
+            'description': 'Add product image URLs as a JSON array. Example: ["https://example.com/image1.jpg", "https://example.com/image2.jpg"]'
+        }),
+        ('Ingredients (For Allergy Tracking)', {
+            'fields': ('ingredients',),
+            'description': 'Add ingredients as a JSON array. Example: ["Parabens", "Sulfates", "Fragrance", "Retinol"]. This helps users with allergies avoid harmful products.'
+        }),
+    )
+    
+    def ingredient_count(self, obj):
+        count = len(obj.ingredients) if obj.ingredients else 0
+        if count == 0:
+            return format_html('<span style="color: orange;">⚠ No ingredients</span>')
+        return format_html('<span style="color: green;">✓ {} ingredients</span>', count)
+    
+    def created_info(self, obj):
+        return "Product entry"
+    
+    ingredient_count.short_description = 'Ingredients'
+    created_info.short_description = 'Info'
+    
+    class Media:
+        css = {
+            'all': ('admin/css/custom_admin.css',)
+        }
+
+
+@admin.register(AppUser)
+class AppUserAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'email', 'allergy_count', 'is_staff', 'is_superuser')
+    list_filter = ('is_staff', 'is_superuser')
+    search_fields = ('name', 'email')
+    ordering = ('-id',)
+    
+    fieldsets = (
+        ('User Information', {
+            'fields': ('name', 'email', 'password', 'bio')
+        }),
+        ('Allergies & Preferences', {
+            'fields': ('allergies',),
+            'description': 'User\'s allergies/ingredients to avoid. Stored as JSON array.'
+        }),
+        ('Permissions', {
+            'fields': ('is_staff', 'is_superuser')
+        }),
+    )
+    
+    readonly_fields = ('password',)
+    
+    def allergy_count(self, obj):
+        count = len(obj.allergies) if obj.allergies else 0
+        if count == 0:
+            return format_html('<span style="color: gray;">No allergies</span>')
+        return format_html('<span style="color: #1B5E47;">✓ {} allergies</span>', count)
+    
+    allergy_count.short_description = 'Allergies'
