@@ -163,7 +163,7 @@ const Header = () => {
             </button>
 
             {user && user.is_staff && (
-              <button className="header-icon-btn" onClick={() => navigate('/admin')} title="Admin Panel" style={{background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)', color: 'white', borderRadius: '8px', padding: '0.5rem 1rem'}}>
+              <button className="header-icon-btn" onClick={() => navigate('/admin')} title="Admin Panel" style={{background: 'linear-gradient(135deg, #1B5E47 0%, #0D3B2E 100%)', color: 'white', borderRadius: '8px', padding: '0.5rem 1rem'}}>
                 <i className="fas fa-cog"></i> Admin
               </button>
             )}

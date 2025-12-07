@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 import json
 
 
-def create_jwt(payload, expires_minutes=60):
-    """Create JWT access token with expiration."""
+def create_jwt(payload, expires_minutes=1440):
+    """Create JWT access token with expiration (default 24 hours)."""
     data = payload.copy()
     exp = datetime.utcnow() + timedelta(minutes=expires_minutes)
     data.update({"exp": exp, "type": "access"})

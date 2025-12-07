@@ -2,6 +2,7 @@ import React, { useContext, useState } from 'react';
 import { CartContext } from '../context/CartContext';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { checkCartAllergies } from '../api';
 
 const API_URL = 'http://localhost:8000/api';
 
@@ -10,6 +11,9 @@ const CartPage = () => {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const [processing, setProcessing] = useState(false);
+  const [showAllergyWarning, setShowAllergyWarning] = useState(false);
+  const [allergyData, setAllergyData] = useState(null);
+  const [checkingAllergies, setCheckingAllergies] = useState(false);
 
   // Helper to get full image URL
   const getImageUrl = (imagePath) => {
@@ -23,6 +27,43 @@ const CartPage = () => {
 
   // Handle checkout
   const handleCheckout = async () => {
+    if (processing || checkingAllergies) return;
+    
+    // First check for allergies
+    setCheckingAllergies(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const productIds = items.map(item => item.product_id || item.id);
+      
+      console.log('🔍 Checking allergies for products:', productIds);
+      
+      const allergyCheckResult = await checkCartAllergies(token, productIds);
+      
+      console.log('✅ Allergy check result:', allergyCheckResult);
+      
+      if (allergyCheckResult.has_allergens) {
+        // Show allergy warning modal
+        console.log('⚠️ Allergens detected! Showing warning modal...');
+        setAllergyData(allergyCheckResult);
+        setShowAllergyWarning(true);
+        setCheckingAllergies(false);
+        return;
+      }
+      
+      console.log('✅ No allergens detected, proceeding with checkout');
+      // No allergies, proceed with checkout
+      proceedWithCheckout();
+    } catch (error) {
+      console.error('❌ Allergy check error:', error);
+      console.error('Error details:', error.response?.data);
+      // If allergy check fails, still allow checkout
+      proceedWithCheckout();
+    } finally {
+      setCheckingAllergies(false);
+    }
+  };
+
+  const proceedWithCheckout = async () => {
     if (processing) return;
     
     setProcessing(true);
@@ -67,6 +108,11 @@ const CartPage = () => {
     }
   };
 
+  const handleProceedAnyway = () => {
+    setShowAllergyWarning(false);
+    proceedWithCheckout();
+  };
+
   if (!user) {
     return (
       <div className="cart-empty-container">
@@ -103,15 +149,16 @@ const CartPage = () => {
   }
 
   return (
-    <div className="cart-page-container">
-      <div className="cart-page-wrapper">
-        <div className="cart-header">
-          <button className="cart-back-btn" onClick={() => navigate(-1)}>
-            <i className="fas fa-arrow-left"></i>
-          </button>
-          <h1 className="cart-title">Your Cart</h1>
-          <span className="cart-item-count">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
-        </div>
+    
+      <div className="cart-page-container">
+        <div className="cart-page-wrapper">
+          <div className="cart-header">
+            <button className="cart-back-btn" onClick={() => navigate(-1)}>
+              <i className="fas fa-arrow-left"></i>
+            </button>
+            <h1 className="cart-title">Your Cart</h1>
+            <span className="cart-item-count">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+          </div>
 
         <div className="cart-content-grid">
           <div className="cart-items-section">
@@ -200,9 +247,14 @@ const CartPage = () => {
               <button 
                 className="cart-checkout-btn" 
                 onClick={handleCheckout}
-                disabled={processing}
+                disabled={processing || checkingAllergies}
               >
-                {processing ? (
+                {checkingAllergies ? (
+                  <>
+                    <div className="loading-spinner" style={{width: '20px', height: '20px', borderWidth: '2px'}}></div>
+                    <span>Checking allergies...</span>
+                  </>
+                ) : processing ? (
                   <>
                     <div className="loading-spinner" style={{width: '20px', height: '20px', borderWidth: '2px'}}></div>
                     <span>Processing...</span>
@@ -223,6 +275,81 @@ const CartPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Allergy Warning Modal */}
+      {showAllergyWarning && allergyData && (
+        <div className="allergy-alert-modal-overlay" onClick={() => setShowAllergyWarning(false)}>
+          <div className="allergy-alert-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="allergy-alert-close" onClick={() => setShowAllergyWarning(false)}>×</button>
+            
+            <div className="allergy-alert-header">
+              <i className="fas fa-exclamation-triangle"></i>
+              <h2>⚠️ Allergy Warning!</h2>
+              <p className="allergy-alert-subtitle">Some items in your cart contain ingredients you're allergic to</p>
+            </div>
+
+            {allergyData.products_with_allergens.map((item, index) => (
+              <div key={index} className="allergy-product-section">
+                <h3 className="allergy-product-title">
+                  <i className="fas fa-box"></i> {item.product.title}
+                </h3>
+                
+                <div className="allergens-detected">
+                  <strong>Detected Allergens:</strong>
+                  <div className="allergen-tags">
+                    {item.allergens_found.map((allergen, idx) => (
+                      <span key={idx} className="allergen-tag">
+                        <i className="fas fa-times-circle"></i> {allergen}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {item.alternatives && item.alternatives.length > 0 && (
+                  <div className="alternative-products-section">
+                    <h4><i className="fas fa-check-circle"></i> Safe Alternatives for You:</h4>
+                    <div className="alternative-products-grid">
+                      {item.alternatives.map((alt) => (
+                        <div key={alt.id} className="alternative-product-card" onClick={() => {
+                          setShowAllergyWarning(false);
+                          navigate(`/products/${alt.id}`);
+                        }}>
+                          <div className="alternative-product-image">
+                            {alt.images && alt.images.length > 0 ? (
+                              <img src={alt.images[0]} alt={alt.title} />
+                            ) : (
+                              <i className="fas fa-image"></i>
+                            )}
+                          </div>
+                          <div className="alternative-product-info">
+                            <h5>{alt.title}</h5>
+                            <p className="alternative-product-price">${alt.price}</p>
+                            <span className="view-product-link">View Product →</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <div className="allergy-alert-actions">
+              <button className="allergy-alert-back-btn" onClick={() => setShowAllergyWarning(false)}>
+                <i className="fas fa-arrow-left"></i> Go Back
+              </button>
+              <button className="allergy-alert-proceed-btn" onClick={handleProceedAnyway}>
+                Proceed Anyway <i className="fas fa-exclamation-circle"></i>
+              </button>
+            </div>
+
+            <div className="allergy-alert-disclaimer">
+              <i className="fas fa-info-circle"></i>
+              <p>We recommend choosing safe alternatives. Proceeding with allergenic products may cause adverse reactions.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

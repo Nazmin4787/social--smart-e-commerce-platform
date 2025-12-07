@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { fetchProducts, addToCart, getReviews, addReview } from '../api';
+import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies } from '../api';
 import ShareButton from '../components/ShareButton';
+import AllergyAlertModal from '../components/AllergyAlertModal';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -15,6 +16,9 @@ const ProductDetailPage = () => {
   const [comment, setComment] = useState('');
   const [selectedImage, setSelectedImage] = useState(0);
   const [imageError, setImageError] = useState(false);
+  const [allergyData, setAllergyData] = useState(null);
+  const [showAllergyModal, setShowAllergyModal] = useState(false);
+  const [checkingAllergies, setCheckingAllergies] = useState(false);
 
   useEffect(() => {
     loadProduct();
@@ -37,10 +41,48 @@ const ProductDetailPage = () => {
 
   const handleAddToCart = async () => {
     if (!user) return alert('Please login');
+    
+    // Check for allergies first
+    setCheckingAllergies(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const allergyCheck = await checkProductAllergies(token, product.id);
+      
+      if (allergyCheck.has_allergens) {
+        // Show allergy warning modal
+        setAllergyData(allergyCheck);
+        setShowAllergyModal(true);
+        setCheckingAllergies(false);
+      } else {
+        // Safe to add - proceed with add to cart
+        await addToCart(token, product.id, 1);
+        alert('Added to cart');
+        setCheckingAllergies(false);
+      }
+    } catch (err) {
+      console.error('Error during add to cart:', err);
+      // If allergy check fails, still allow adding (with warning)
+      if (err.response?.status === 401) {
+        alert('Please login again');
+      } else {
+        // Proceed with add to cart anyway if allergy check fails
+        try {
+          const token = localStorage.getItem('accessToken');
+          await addToCart(token, product.id, 1);
+          alert('Added to cart');
+        } catch (addErr) {
+          alert(addErr.response?.data?.error || 'Failed to add to cart');
+        }
+      }
+      setCheckingAllergies(false);
+    }
+  };
+
+  const handleAddAnywayFromModal = async () => {
     try {
       const token = localStorage.getItem('accessToken');
       await addToCart(token, product.id, 1);
-      alert('Added to cart');
+      alert('Added to cart (contains allergens - please be careful!)');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to add to cart');
     }
@@ -189,9 +231,17 @@ const ProductDetailPage = () => {
               <button 
                 className="add-to-bag-btn" 
                 onClick={handleAddToCart}
-                disabled={product.stock <= 0}
+                disabled={product.stock <= 0 || checkingAllergies}
               >
-                <i className="fas fa-shopping-bag"></i> Add to Bag
+                {checkingAllergies ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin"></i> Checking...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-shopping-bag"></i> Add to Bag
+                  </>
+                )}
               </button>
               <button 
                 className="book-now-btn" 
@@ -287,6 +337,15 @@ const ProductDetailPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Allergy Alert Modal */}
+      {showAllergyModal && allergyData && (
+        <AllergyAlertModal
+          allergyData={allergyData}
+          onClose={() => setShowAllergyModal(false)}
+          onAddAnyway={handleAddAnywayFromModal}
+        />
+      )}
     </div>
   );
 };

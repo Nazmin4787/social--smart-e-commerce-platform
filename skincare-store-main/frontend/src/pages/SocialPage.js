@@ -69,10 +69,13 @@ const SocialPage = () => {
     const token = localStorage.getItem('access_token');
 
     try {
-      const data = await getSuggestedUsers(1, token);
-      setSuggestedUsers(data.users);
+      console.log('Fetching suggested users...');
+      const data = await getSuggestedUsers(token);
+      console.log('Suggested users response:', data);
+      setSuggestedUsers(data.suggested_users || []);
     } catch (error) {
       console.error('Error fetching suggested users:', error);
+      setSuggestedUsers([]);
     } finally {
       setLoading(false);
     }

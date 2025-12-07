@@ -1,9 +1,10 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { login as apiLogin, register as apiRegister } from '../api';
+import AllergySelector from './AllergySelector';
 
 const AuthModal = ({ onClose }) => {
-  const [step, setStep] = useState(1); // 1: phone, 2: details
+  const [step, setStep] = useState(1); // 1: phone, 2: details, 3: allergies
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     phone: '',
@@ -11,6 +12,7 @@ const AuthModal = ({ onClose }) => {
     email: '',
     password: ''
   });
+  const [allergies, setAllergies] = useState([]);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('error'); // 'error', 'success', 'info'
   const [loading, setLoading] = useState(false);
@@ -37,6 +39,20 @@ const AuthModal = ({ onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // For signup, move to allergy step first
+    if (!isLogin && step === 2) {
+      if (!acceptTerms) {
+        setMessage('Please accept the Terms & Conditions and Privacy Policy');
+        setMessageType('error');
+        return;
+      }
+      setStep(3); // Move to allergy selection
+      setMessage('');
+      return;
+    }
+    
+    // For login or final signup submission
     setLoading(true);
     setMessage('');
 
@@ -67,7 +83,7 @@ const AuthModal = ({ onClose }) => {
         }
       } else {
         console.log('Attempting registration with:', formData.email);
-        const response = await apiRegister(formData.name, formData.email, formData.password);
+        const response = await apiRegister(formData.name, formData.email, formData.password, allergies);
         console.log('Register response:', response);
         
         if (response && response.user && response.access_token) {
@@ -185,7 +201,7 @@ const AuthModal = ({ onClose }) => {
               {message && <div className={`auth-error-msg ${messageType}`}>{message}</div>}
             </div>
           </div>
-        ) : (
+        ) : step === 2 ? (
           <div className="auth-step-two">
             <button className="back-btn" onClick={() => setStep(1)}>← Back</button>
             
@@ -272,7 +288,34 @@ const AuthModal = ({ onClose }) => {
               {message && <div className={`auth-error-msg ${messageType}`}>{message}</div>}
             </form>
           </div>
-        )}
+        ) : step === 3 ? (
+          <div className="auth-step-three">
+            <button className="back-btn" onClick={() => setStep(2)}>← Back</button>
+            
+            <div className="allergy-step-header">
+              <h2>Almost Done!</h2>
+              <p className="allergy-step-subtitle">
+                Help us keep you safe by telling us about any allergies
+              </p>
+            </div>
+
+            <AllergySelector 
+              selectedAllergies={allergies}
+              onChange={setAllergies}
+            />
+
+            <button 
+              type="button"
+              className="complete-registration-btn" 
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? 'Creating Account...' : 'Complete Registration'}
+            </button>
+
+            {message && <div className={`auth-error-msg ${messageType}`}>{message}</div>}
+          </div>
+        ) : null}
       </div>
     </div>
   );

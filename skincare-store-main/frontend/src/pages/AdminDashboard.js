@@ -50,7 +50,14 @@ const AdminDashboard = () => {
   
   // Banners management
   const [banners, setBanners] = useState([]);
-  const [bannerForm, setBannerForm] = useState({ title: '', image: null, link: '', position: 0 });
+  const [bannerForm, setBannerForm] = useState({ 
+    hero_title: '', 
+    hero_description: '',
+    hero_image: null,
+    featured_title: '',
+    featured_description: '',
+    featured_image: null
+  });
 
   useEffect(() => {
     if (!user || !user.is_staff) {
@@ -253,22 +260,50 @@ const AdminDashboard = () => {
     });
   };
 
-  const handleBannerSubmit = async (e) => {
+  const handleBannerSubmit = async (e, bannerType) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('accessToken');
       const formData = new FormData();
-      formData.append('title', bannerForm.title);
-      formData.append('link', ''); // Default empty link
-      formData.append('position', 0); // Default position
-      if (bannerForm.image) {
-        formData.append('image', bannerForm.image);
+      
+      // Determine which form fields to use based on banner type
+      const title = bannerType === 'hero' ? bannerForm.hero_title : bannerForm.featured_title;
+      const description = bannerType === 'hero' ? bannerForm.hero_description : bannerForm.featured_description;
+      const image = bannerType === 'hero' ? bannerForm.hero_image : bannerForm.featured_image;
+      
+      if (!title || !image) {
+        alert('Please fill in all required fields');
+        return;
       }
       
+      formData.append('title', title);
+      formData.append('banner_type', bannerType);
+      formData.append('description', description || '');
+      formData.append('link_url', '/products');
+      formData.append('order', bannerType === 'hero' ? 0 : 1);
+      formData.append('image', image);
+      
       await createBanner(token, formData);
-      setBannerForm({ title: '', image: null, link: '', position: 0 });
+      
+      // Clear only the relevant form fields
+      if (bannerType === 'hero') {
+        setBannerForm({
+          ...bannerForm,
+          hero_title: '',
+          hero_description: '',
+          hero_image: null
+        });
+      } else {
+        setBannerForm({
+          ...bannerForm,
+          featured_title: '',
+          featured_description: '',
+          featured_image: null
+        });
+      }
+      
       fetchBanners();
-      alert('Banner created successfully!');
+      alert(`${bannerType === 'hero' ? 'Hero' : 'Featured'} banner uploaded successfully!`);
     } catch (error) {
       console.error('Error creating banner:', error);
       alert('Error creating banner: ' + (error.response?.data?.error || error.message));
@@ -714,55 +749,143 @@ const AdminDashboard = () => {
           <div className="banners-tab">
             <h1 className="admin-heading">Banners Management</h1>
             
+            {/* Hero Banner Section */}
             <div className="banner-form-card">
-              <h2>Add New Banner</h2>
-              <form onSubmit={handleBannerSubmit} className="banner-form">
+              <h2><i className="fas fa-home"></i> Hero Banner (Homepage Top)</h2>
+              <p className="banner-description">Upload a banner for the main hero section at the top of homepage</p>
+              <form onSubmit={(e) => handleBannerSubmit(e, 'hero')} className="banner-form">
                 <div className="form-group">
                   <label>Banner Title *</label>
                   <input 
                     type="text"
-                    placeholder="Enter banner title"
-                    value={bannerForm.title}
-                    onChange={(e) => setBannerForm({...bannerForm, title: e.target.value})}
+                    placeholder="e.g., Welcome to Our Skincare Store"
+                    value={bannerForm.hero_title || ''}
+                    onChange={(e) => setBannerForm({...bannerForm, hero_title: e.target.value})}
                     required
                     className="form-input"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Banner Image *</label>
+                  <label>Description (Optional)</label>
+                  <textarea 
+                    placeholder="Enter banner description..."
+                    value={bannerForm.hero_description || ''}
+                    onChange={(e) => setBannerForm({...bannerForm, hero_description: e.target.value})}
+                    className="form-input"
+                    rows="3"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Hero Banner Image *</label>
                   <input 
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setBannerForm({...bannerForm, image: e.target.files[0]})}
+                    onChange={(e) => setBannerForm({...bannerForm, hero_image: e.target.files[0]})}
                     className="file-input"
-                    required
+                    required={!banners.some(b => b.banner_type === 'hero')}
                   />
+                  {bannerForm.hero_image && (
+                    <span className="file-name">
+                      <i className="fas fa-check-circle"></i> {bannerForm.hero_image.name}
+                    </span>
+                  )}
                 </div>
-                <button type="submit" className="btn-submit">Create Banner</button>
+                <button type="submit" className="btn-submit hero-btn">
+                  <i className="fas fa-upload"></i> Upload Hero Banner
+                </button>
               </form>
+              
+              {/* Show current hero banner */}
+              {banners.filter(b => b.banner_type === 'hero').length > 0 && (
+                <div className="current-banner-preview">
+                  <h4>Current Hero Banner:</h4>
+                  {banners.filter(b => b.banner_type === 'hero').map(banner => (
+                    <div key={banner.id} className="banner-preview-item">
+                      {banner.image && (
+                        <img src={banner.image.startsWith('http') ? banner.image : `http://localhost:8000${banner.image}`} alt={banner.title} />
+                      )}
+                      <div className="banner-preview-info">
+                        <h5>{banner.title}</h5>
+                        <button 
+                          className="btn-delete-small"
+                          onClick={() => handleBannerDelete(banner.id)}
+                        >
+                          <i className="fas fa-trash"></i> Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="banners-grid">
-              {Array.isArray(banners) && banners.length > 0 ? (
-                banners.map(banner => (
-                  <div key={banner.id} className="banner-card">
-                    {banner.image && <img src={banner.image} alt={banner.title} />}
-                    <div className="banner-info">
-                      <h3>{banner.title}</h3>
-                      <p>Position: {banner.position}</p>
-                      <p>Status: {banner.is_active ? 'Active' : 'Inactive'}</p>
-                      {banner.link && <a href={banner.link} target="_blank" rel="noopener noreferrer">Link</a>}
-                      <button 
-                        className="btn-delete"
-                        onClick={() => handleBannerDelete(banner.id)}
-                      >
-                        Delete
-                      </button>
+            {/* Featured Products Banner Section */}
+            <div className="banner-form-card featured-banner-section">
+              <h2><i className="fas fa-star"></i> Featured Products Banner</h2>
+              <p className="banner-description">Upload a banner for the featured products section (appears between product sections)</p>
+              <form onSubmit={(e) => handleBannerSubmit(e, 'featured')} className="banner-form">
+                <div className="form-group">
+                  <label>Banner Title *</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g., Customer Favorites"
+                    value={bannerForm.featured_title || ''}
+                    onChange={(e) => setBannerForm({...bannerForm, featured_title: e.target.value})}
+                    required
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Description (Optional)</label>
+                  <textarea 
+                    placeholder="e.g., Discover our best-selling products..."
+                    value={bannerForm.featured_description || ''}
+                    onChange={(e) => setBannerForm({...bannerForm, featured_description: e.target.value})}
+                    className="form-input"
+                    rows="3"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Featured Banner Image *</label>
+                  <input 
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setBannerForm({...bannerForm, featured_image: e.target.files[0]})}
+                    className="file-input"
+                    required={!banners.some(b => b.banner_type === 'featured')}
+                  />
+                  {bannerForm.featured_image && (
+                    <span className="file-name">
+                      <i className="fas fa-check-circle"></i> {bannerForm.featured_image.name}
+                    </span>
+                  )}
+                </div>
+                <button type="submit" className="btn-submit featured-btn">
+                  <i className="fas fa-upload"></i> Upload Featured Banner
+                </button>
+              </form>
+              
+              {/* Show current featured banner */}
+              {banners.filter(b => b.banner_type === 'featured').length > 0 && (
+                <div className="current-banner-preview">
+                  <h4>Current Featured Banner:</h4>
+                  {banners.filter(b => b.banner_type === 'featured').map(banner => (
+                    <div key={banner.id} className="banner-preview-item">
+                      {banner.image && (
+                        <img src={banner.image.startsWith('http') ? banner.image : `http://localhost:8000${banner.image}`} alt={banner.title} />
+                      )}
+                      <div className="banner-preview-info">
+                        <h5>{banner.title}</h5>
+                        <button 
+                          className="btn-delete-small"
+                          onClick={() => handleBannerDelete(banner.id)}
+                        >
+                          <i className="fas fa-trash"></i> Remove
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <p>No banners found</p>
+                  ))}
+                </div>
               )}
             </div>
           </div>

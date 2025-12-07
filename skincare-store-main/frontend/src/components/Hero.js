@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getBanners } from '../api';
 
 const Hero = () => {
   const [banners, setBanners] = useState([]);
@@ -12,9 +11,16 @@ const Hero = () => {
 
   const fetchBanners = async () => {
     try {
-      const data = await getBanners();
-      const activeBanners = data.filter(banner => banner.is_active);
-      setBanners(activeBanners);
+      const response = await fetch('http://localhost:8000/api/banners/?type=hero');
+      const data = await response.json();
+      
+      console.log('Hero banners data:', data); // Debug log
+      
+      if (data.banners && data.banners.length > 0) {
+        const activeBanners = data.banners.filter(banner => banner.is_active);
+        console.log('Active hero banners:', activeBanners); // Debug log
+        setBanners(activeBanners);
+      }
     } catch (error) {
       console.error('Error fetching banners:', error);
     } finally {
@@ -87,9 +93,19 @@ const Hero = () => {
             className={`carousel-slide ${index === currentSlide ? 'active' : ''}`}
             style={{ display: index === currentSlide ? 'block' : 'none' }}
           >
-            <img src={banner.image} alt={banner.title} className="banner-image" />
+            <img 
+              src={`http://localhost:8000${banner.image}`} 
+              alt={banner.title} 
+              className="banner-image"
+              onLoad={() => console.log('Hero image loaded:', banner.image)}
+              onError={(e) => {
+                console.error('Hero image failed to load:', banner.image);
+                console.error('Full URL:', e.target.src);
+              }}
+            />
             <div className="banner-overlay">
               <h2 className="banner-title">{banner.title}</h2>
+              {banner.description && <p className="banner-description">{banner.description}</p>}
             </div>
           </div>
         ))}

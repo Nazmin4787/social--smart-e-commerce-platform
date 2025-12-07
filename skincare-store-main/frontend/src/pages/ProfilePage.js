@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { getProfile, getLikedProducts, likeProduct, addToCart } from '../api';
+import { getProfile, getLikedProducts, likeProduct, addToCart, updateUserAllergies } from '../api';
 import { getUserProfile, getFollowers, getFollowing } from '../api/socialApi';
 import Header from '../components/Header';
 import ProductCard from '../components/ProductCard';
+import AllergySelector from '../components/AllergySelector';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -16,6 +17,9 @@ const ProfilePage = () => {
   const [likedProductsLoading, setLikedProductsLoading] = useState(false);
   const [likedProductIds, setLikedProductIds] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingAllergies, setIsEditingAllergies] = useState(false);
+  const [allergies, setAllergies] = useState([]);
+  const [savingAllergies, setSavingAllergies] = useState(false);
   const [socialStats, setSocialStats] = useState(null);
   const [followers, setFollowers] = useState([]);
   const [following, setFollowing] = useState([]);
@@ -44,6 +48,7 @@ const ProfilePage = () => {
     try {
       const data = await getProfile(user.token);
       setProfile(data);
+      setAllergies(data.allergies || []);
       // Fetch social stats
       const socialData = await getUserProfile(user.token, user.id);
       setSocialStats(socialData);
@@ -124,6 +129,32 @@ const ProfilePage = () => {
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditForm({ name: '', email: '', phone: '', bio: '' });
+  };
+
+  const handleEditAllergiesClick = () => {
+    setIsEditingAllergies(true);
+  };
+
+  const handleCancelAllergyEdit = () => {
+    setIsEditingAllergies(false);
+    setAllergies(profile.allergies || []);
+  };
+
+  const handleSaveAllergies = async () => {
+    setSavingAllergies(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      await updateUserAllergies(token, allergies);
+      alert('Allergies updated successfully!');
+      setIsEditingAllergies(false);
+      // Refresh profile to get updated data
+      await fetchProfile();
+    } catch (error) {
+      console.error('Error updating allergies:', error);
+      alert(error.response?.data?.error || 'Failed to update allergies');
+    } finally {
+      setSavingAllergies(false);
+    }
   };
 
   const handleSaveChanges = async () => {
@@ -242,6 +273,13 @@ const ProfilePage = () => {
               >
                 <i className="fas fa-heart"></i>
                 <span>Liked Products</span>
+              </button>
+              <button 
+                className={`profile-nav-item ${activeTab === 'allergies' ? 'active' : ''}`}
+                onClick={() => setActiveTab('allergies')}
+              >
+                <i className="fas fa-exclamation-triangle"></i>
+                <span>My Allergies</span>
               </button>
               {user && !user.is_staff && !user.is_superuser && (
                 <button 
@@ -404,6 +442,89 @@ const ProfilePage = () => {
                         isLiked={true}
                       />
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'allergies' && (
+              <div className="profile-section">
+                <h2 className="section-heading">
+                  <i className="fas fa-exclamation-triangle"></i> My Allergies
+                </h2>
+                
+                {!isEditingAllergies ? (
+                  <div className="allergies-view">
+                    <div className="allergies-header">
+                      <p className="allergies-description">
+                        Manage your skin allergies to help us recommend safe products for you.
+                      </p>
+                      <button 
+                        className="edit-allergies-btn"
+                        onClick={handleEditAllergiesClick}
+                      >
+                        <i className="fas fa-edit"></i> Edit Allergies
+                      </button>
+                    </div>
+                    
+                    {allergies && allergies.length > 0 ? (
+                      <div className="allergies-display">
+                        <h3>Your Current Allergies:</h3>
+                        <div className="allergy-chips">
+                          {allergies.map((allergy, index) => (
+                            <span key={index} className="allergy-chip">
+                              <i className="fas fa-exclamation-circle"></i>
+                              {allergy}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="allergy-info-box">
+                          <i className="fas fa-shield-alt"></i>
+                          <p>We'll alert you if products contain these ingredients and suggest safer alternatives.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="no-allergies">
+                        <i className="fas fa-check-circle"></i>
+                        <p>You haven't added any allergies yet.</p>
+                        <p className="no-allergies-sub">Click "Edit Allergies" to add ingredients you want to avoid.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="allergies-edit">
+                    <p className="edit-instructions">
+                      Select all ingredients that cause allergic reactions for you:
+                    </p>
+                    <AllergySelector 
+                      selectedAllergies={allergies}
+                      onChange={setAllergies}
+                    />
+                    <div className="allergy-edit-actions">
+                      <button 
+                        className="save-allergies-btn"
+                        onClick={handleSaveAllergies}
+                        disabled={savingAllergies}
+                      >
+                        {savingAllergies ? (
+                          <>
+                            <div className="button-spinner"></div>
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-save"></i> Save Changes
+                          </>
+                        )}
+                      </button>
+                      <button 
+                        className="cancel-allergies-btn"
+                        onClick={handleCancelAllergyEdit}
+                        disabled={savingAllergies}
+                      >
+                        <i className="fas fa-times"></i> Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

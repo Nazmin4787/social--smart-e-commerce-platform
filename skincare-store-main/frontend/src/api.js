@@ -99,8 +99,8 @@ export async function fetchProducts() {
 }
 
 // Authentication
-export async function register(name, email, password) {
-  return axios.post(`${API_BASE}/auth/register/`, { name, email, password }).then(r => r.data);
+export async function register(name, email, password, allergies = []) {
+  return axios.post(`${API_BASE}/auth/register/`, { name, email, password, allergies }).then(r => r.data);
 }
 
 export async function login(email, password) {
@@ -229,7 +229,7 @@ export async function bulkUpdateStock(token, updates) {
 }
 
 export async function getBanners() {
-  return axios.get(`${API_BASE}/banners/`).then(r => r.data);
+  return axios.get(`${API_BASE}/banners/`).then(r => r.data.banners || r.data);
 }
 
 export async function createBanner(token, formData) {
@@ -286,6 +286,29 @@ export async function shareProduct(token, productId, recipientId, message) {
       recipient_id: recipientId,
       message: message
     },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+// ============================================================================
+// ALLERGY MANAGEMENT
+// ============================================================================
+export async function checkProductAllergies(token, productId) {
+  return axios.get(`${API_BASE}/allergies/check/${productId}/`, getAuthHeaders(token)).then(r => r.data);
+}
+
+export async function checkCartAllergies(token, productIds) {
+  return axios.post(
+    `${API_BASE}/allergies/check-cart/`,
+    { product_ids: productIds },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+export async function updateUserAllergies(token, allergies) {
+  return axios.put(
+    `${API_BASE}/allergies/update/`,
+    { allergies },
     getAuthHeaders(token)
   ).then(r => r.data);
 }
