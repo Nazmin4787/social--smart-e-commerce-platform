@@ -10,6 +10,10 @@ class Product(models.Model):
     images = models.JSONField(default=list, blank=True)
     category = models.CharField(max_length=100, default='general')
     ingredients = models.JSONField(default=list, blank=True)  # List of ingredients
+    is_trending = models.BooleanField(default=False)  # Mark products as trending
+    benefits = models.JSONField(default=list, blank=True)  # List of product benefits
+    how_to_use = models.JSONField(default=list, blank=True)  # List of usage instructions
+    faqs = models.JSONField(default=list, blank=True)  # List of FAQs with question and answer
 
     def to_dict(self):
         return {
@@ -21,6 +25,10 @@ class Product(models.Model):
             'images': self.images,
             'category': self.category,
             'ingredients': self.ingredients,
+            'is_trending': self.is_trending,
+            'benefits': self.benefits,
+            'how_to_use': self.how_to_use,
+            'faqs': self.faqs,
             'average_rating': self.average_rating(),
             'reviews': [r.to_dict() for r in getattr(self, 'reviews_cache', self.reviews.all())[:10]] if hasattr(self, 'reviews') else [],
         }

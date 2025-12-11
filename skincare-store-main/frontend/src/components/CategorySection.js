@@ -3,39 +3,44 @@ import React from 'react';
 const categories = [
   { 
     name: 'Skin Care', 
-    value: 'skincare',
+    value: 'SKINCARE',
     image: '/images/categories/skincare.jpeg',
     placeholder: '🧴'
   },
   { 
     name: 'Hair Care', 
-    value: 'haircare',
+    value: 'HAIRCARE',
     image: '/images/categories/haircare.jpeg',
     placeholder: '💇'
   },
   { 
     name: 'Body Care', 
-    value: 'bodycare',
+    value: 'BODYCARE',
     image: '/images/categories/bodycare.jpeg',
     placeholder: '🧴'
   },
   { 
     name: 'Make Up', 
-    value: 'makeup',
+    value: 'MAKEUP',
     image: '/images/categories/makeup.jpeg',
     placeholder: '💄'
   },
   { 
     name: 'Perfume', 
-    value: 'perfume',
+    value: 'PERFUME',
     image: '/images/categories/perfume.jpeg',
     placeholder: '🌸'
   }
 ];
 
-const CategorySection = () => {
-  const handleCategoryClick = (category) => {
-    window.location.href = `/products?category=${category}`;
+const CategorySection = ({ onCategorySelect, selectedCategory }) => {
+  const handleCategoryClick = (categoryValue) => {
+    if (onCategorySelect) {
+      onCategorySelect(categoryValue);
+    } else {
+      // Fallback to navigation if no callback provided
+      window.location.href = `/products?category=${categoryValue}`;
+    }
   };
 
   return (
@@ -46,7 +51,7 @@ const CategorySection = () => {
           {categories.map((category, index) => (
             <div
               key={index}
-              className="category-box"
+              className={`category-box ${selectedCategory === category.value ? 'active' : ''}`}
               onClick={() => handleCategoryClick(category.value)}
             >
               <div className="category-box-image">

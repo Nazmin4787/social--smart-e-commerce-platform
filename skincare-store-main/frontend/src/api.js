@@ -243,7 +243,10 @@ export async function createBanner(token, formData) {
 }
 
 export async function deleteBanner(token, bannerId) {
-  return axios.delete(`${API_BASE}/admin/banners/${bannerId}/`, getAuthHeaders(token)).then(r => r.data);
+  return axios.delete(`${API_BASE}/admin/banners/`, {
+    ...getAuthHeaders(token),
+    data: { id: bannerId }
+  }).then(r => r.data);
 }
 
 // Admin Product Management

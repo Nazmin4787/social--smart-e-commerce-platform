@@ -14,46 +14,62 @@ const AboutSection = () => {
       setAboutData(data);
     } catch (error) {
       console.error('Error fetching about data:', error);
+      // Set default data if API fails
+      setAboutData({
+        company_name: 'Skincare Store',
+        description: 'Your trusted destination for premium skincare products. We believe in natural beauty and provide high-quality products to help you achieve healthy, glowing skin.',
+        mission: 'To provide accessible, effective skincare solutions that enhance natural beauty and promote skin health.',
+        contact: {
+          email: 'support@skincarestore.com',
+          phone: '+1-800-SKINCARE',
+          address: '123 Beauty Lane, Wellness City, CA 90210'
+        },
+        social_media: {
+          instagram: 'skincarestore',
+          facebook: 'facebook.com/skincarestore',
+          twitter: 'skincarestore'
+        }
+      });
     }
   };
 
-  if (!aboutData) {
-    return null;
-  }
-
   return (
     <section className="about-section" id="about">
-      <div class="container">
+      <div className="container">
         <div className="about-content">
           <div className="about-text">
             <h2>About Us</h2>
-            <h3>{aboutData.company_name}</h3>
-            <p className="about-description">{aboutData.description}</p>
-            <p className="about-mission"><strong>Our Mission:</strong> {aboutData.mission}</p>
+            <h3>{aboutData?.company_name || 'Skincare Store'}</h3>
+            <p className="about-description">
+              {aboutData?.description || 'Your trusted destination for premium skincare products. We believe in natural beauty and provide high-quality products to help you achieve healthy, glowing skin.'}
+            </p>
+            <p className="about-mission">
+              <strong>Our Mission:</strong> {aboutData?.mission || 'To provide accessible, effective skincare solutions that enhance natural beauty and promote skin health.'}
+            </p>
             
             <div className="about-info">
               <div className="info-item">
                 <i className="fas fa-envelope"></i>
-                <span>{aboutData.contact?.email}</span>
+                <span>{aboutData?.contact?.email || 'support@skincarestore.com'}</span>
               </div>
               <div className="info-item">
                 <i className="fas fa-phone"></i>
-                <span>{aboutData.contact?.phone}</span>
+                <span>{aboutData?.contact?.phone || '+1-800-SKINCARE'}</span>
               </div>
               <div className="info-item">
                 <i className="fas fa-map-marker-alt"></i>
-                <span>{aboutData.contact?.address}</span>
+                <span>{aboutData?.contact?.address || '123 Beauty Lane, Wellness City, CA 90210'}</span>
               </div>
             </div>
 
             <div className="social-links">
-              <a href={`https://instagram.com/${aboutData.social_media?.instagram}`} target="_blank" rel="noopener noreferrer">
+              <a href={`https://instagram.com/${aboutData?.social_media?.instagram || 'skincarestore'}`} target="_blank" rel="noopener noreferrer">
                 <i className="fab fa-instagram"></i>
               </a>
-              <a href={`https://${aboutData.social_media?.facebook}`} target="_blank" rel="noopener noreferrer">
+              <a href={`https://${aboutData?.social_media?.facebook || 'facebook.com/skincarestore'}`} target="_blank" rel="noopener noreferrer">
                 <i className="fab fa-facebook"></i>
               </a>
-              <a href={`https://twitter.com/${aboutData.social_media?.twitter}`} target="_blank" rel="noopener noreferrer">
+              <a href={`https://twitter.com/${aboutData?.social_media?.twitter || 'skincarestore'}`} target="_blank" rel="noopener noreferrer">
                 <i className="fab fa-twitter"></i>
               </a>
             </div>

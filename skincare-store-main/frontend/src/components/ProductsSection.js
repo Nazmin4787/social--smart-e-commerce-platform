@@ -3,7 +3,7 @@ import ProductCard from './ProductCard';
 import { AuthContext } from '../context/AuthContext';
 import { fetchProducts as getProducts, getLikedProducts, likeProduct, addToCart } from '../api';
 
-const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = false }) => {
+const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = false, category = null, ingredient = null }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [likedProducts, setLikedProducts] = useState([]);
@@ -14,12 +14,45 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
     if (user) {
       fetchLikedProducts();
     }
-  }, [user]);
+  }, [user, category, ingredient]);
 
   const fetchProducts = async () => {
     try {
+      setLoading(true);
       const data = await getProducts();
-      setProducts(data.slice(0, limit));
+      
+      // Debug logging
+      console.log('All products:', data.length);
+      console.log('Is trending section:', isTrending);
+      if (isTrending && data.length > 0) {
+        console.log('Sample product:', data[0]);
+        console.log('Products with is_trending:', data.filter(p => p.is_trending).length);
+      }
+      
+      let filteredProducts = data;
+      
+      // Filter by trending first if specified (trending section is independent of category)
+      if (isTrending) {
+        filteredProducts = filteredProducts.filter(product => product.is_trending);
+        console.log('Filtered trending products:', filteredProducts.length);
+      } else {
+        // Apply category filter if specified
+        if (category) {
+          filteredProducts = filteredProducts.filter(product => 
+            product.category && product.category.toUpperCase() === category.toUpperCase()
+          );
+        }
+        
+        // Apply ingredient filter if specified
+        if (ingredient) {
+          filteredProducts = filteredProducts.filter(product => 
+            product.ingredients && Array.isArray(product.ingredients) && 
+            product.ingredients.some(ing => ing.toUpperCase().includes(ingredient.toUpperCase()))
+          );
+        }
+      }
+      
+      setProducts(filteredProducts.slice(0, limit));
     } catch (error) {
       console.error('Error fetching products:', error);
     } finally {

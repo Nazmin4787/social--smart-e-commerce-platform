@@ -7,6 +7,10 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   
+  console.log('ProductCard - User:', user ? 'Logged in' : 'Not logged in');
+  console.log('ProductCard - onLike type:', typeof onLike);
+  console.log('ProductCard - isLiked:', isLiked);
+  
   // Helper to get full image URL
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
@@ -49,7 +53,14 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
               className={`like-btn ${isLiked ? 'liked' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
-                onLike(product.id);
+                console.log('Like button clicked for product:', product.id);
+                console.log('onLike function:', onLike);
+                if (onLike && typeof onLike === 'function') {
+                  console.log('Calling onLike...');
+                  onLike(product.id);
+                } else {
+                  console.error('onLike is not a function', onLike);
+                }
               }}
               aria-label="Like product"
             >

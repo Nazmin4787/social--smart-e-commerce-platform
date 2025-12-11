@@ -37,6 +37,9 @@ const AdminDashboard = () => {
   // Products management
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [ingredientFilter, setIngredientFilter] = useState('all');
+  const [showTrendingOnly, setShowTrendingOnly] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [productForm, setProductForm] = useState({
@@ -45,7 +48,12 @@ const AdminDashboard = () => {
     price: '',
     stock: '',
     category: '',
-    images: []
+    is_trending: false,
+    images: [],
+    ingredients: [],
+    benefits: [],
+    how_to_use: [],
+    faqs: []
   });
   
   // Banners management
@@ -187,11 +195,20 @@ const AdminDashboard = () => {
       formData.append('price', parseFloat(productForm.price));
       formData.append('stock', parseInt(productForm.stock));
       formData.append('category', productForm.category);
+      formData.append('is_trending', productForm.is_trending ? 'true' : 'false');
       
-      // Append image files
+      // Append ingredients, benefits, and how_to_use
+      formData.append('ingredients', (productForm.ingredients || []).join('\n'));
+      formData.append('benefits', (productForm.benefits || []).join('\n'));
+      formData.append('how_to_use', (productForm.how_to_use || []).join('\n'));
+      
+      // Append image files (only new uploads, not existing URLs)
       if (productForm.images && productForm.images.length > 0) {
-        productForm.images.forEach((file, index) => {
-          formData.append('images', file);
+        productForm.images.forEach((file) => {
+          // Only append if it's a File object (new upload), not a string (existing URL)
+          if (file instanceof File) {
+            formData.append('images', file);
+          }
         });
       }
 
@@ -211,6 +228,7 @@ const AdminDashboard = () => {
         price: '',
         stock: '',
         category: '',
+        is_trending: false,
         images: []
       });
       fetchProducts();
@@ -228,7 +246,12 @@ const AdminDashboard = () => {
       price: product.price.toString(),
       stock: product.stock.toString(),
       category: product.category || '',
-      images: product.images || []
+      is_trending: product.is_trending || false,
+      images: product.images || [],
+      ingredients: product.ingredients || [],
+      benefits: product.benefits || [],
+      how_to_use: product.how_to_use || [],
+      faqs: product.faqs || []
     });
     setShowProductForm(true);
   };
@@ -323,9 +346,34 @@ const AdminDashboard = () => {
     }
   };
 
-  const filteredProducts = products.filter(p => 
-    p.title && p.title.toLowerCase().includes(productSearch.toLowerCase())
-  );
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.title && p.title.toLowerCase().includes(productSearch.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
+    const matchesIngredient = ingredientFilter === 'all' || (p.ingredients && Array.isArray(p.ingredients) && p.ingredients.some(ing => ing.toUpperCase().includes(ingredientFilter)));
+    const matchesTrending = !showTrendingOnly || p.is_trending;
+    return matchesSearch && matchesCategory && matchesIngredient && matchesTrending;
+  });
+
+  const categories = [
+    { value: 'all', label: 'All Categories' },
+    { value: 'SKINCARE', label: 'Skin Care' },
+    { value: 'HAIRCARE', label: 'Hair Care' },
+    { value: 'BODYCARE', label: 'Body Care' },
+    { value: 'MAKEUP', label: 'Make Up' },
+    { value: 'PERFUME', label: 'Perfume' }
+  ];
+
+  const featuredIngredients = [
+    { value: 'all', label: 'All Ingredients' },
+    { value: 'RETINOL', label: 'Retinol' },
+    { value: 'CERAMIDES', label: 'Ceramides' },
+    { value: 'WATERMELON', label: 'Watermelon' },
+    { value: 'STRAWBERRY', label: 'Strawberry' },
+    { value: 'HYALURONIC_ACID', label: 'Hyaluronic Acid' },
+    { value: 'POMEGRANATE', label: 'Pomegranate' },
+    { value: 'VITAMIN_C', label: 'Vitamin C' },
+    { value: 'NIACINAMIDE', label: 'Niacinamide' }
+  ];
 
   if (!user) {
     return <div style={{padding: '2rem', textAlign: 'center'}}>Loading...</div>;
@@ -619,14 +667,90 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="form-group">
-                      <label>Category</label>
-                      <input
-                        type="text"
+                      <label>Category *</label>
+                      <select
                         name="category"
                         value={productForm.category}
                         onChange={handleProductFormChange}
-                        placeholder="e.g., Skincare, Moisturizer, Serum"
+                        required
                         className="form-control"
+                      >
+                        <option value="">Select a category</option>
+                        <option value="SKINCARE">Skin Care</option>
+                        <option value="HAIRCARE">Hair Care</option>
+                        <option value="BODYCARE">Body Care</option>
+                        <option value="MAKEUP">Make Up</option>
+                        <option value="PERFUME">Perfume</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          name="is_trending"
+                          checked={productForm.is_trending}
+                          onChange={(e) => setProductForm({...productForm, is_trending: e.target.checked})}
+                        />
+                        <span>Mark as Trending Product</span>
+                      </label>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Select Featured Ingredients</label>
+                      <select
+                        className="form-control"
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value && !productForm.ingredients.includes(value)) {
+                            setProductForm({...productForm, ingredients: [...productForm.ingredients, value]});
+                          }
+                          e.target.value = '';
+                        }}
+                      >
+                        <option value="">Add an ingredient...</option>
+                        {featuredIngredients.filter(ing => ing.value !== 'all').map(ing => (
+                          <option key={ing.value} value={ing.label}>{ing.label}</option>
+                        ))}
+                      </select>
+                      <div className="selected-items-display">
+                        {productForm.ingredients?.filter(ing => ing.trim()).map((ingredient, idx) => (
+                          <span key={idx} className="selected-item-tag">
+                            {ingredient}
+                            <button
+                              type="button"
+                              onClick={() => setProductForm({
+                                ...productForm,
+                                ingredients: productForm.ingredients.filter((_, i) => i !== idx)
+                              })}
+                              className="remove-tag-btn"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Product Benefits (one per line)</label>
+                      <textarea
+                        placeholder="Enter benefits, one per line&#10;e.g., Deeply hydrates and nourishes skin&#10;Reduces fine lines and wrinkles"
+                        value={productForm.benefits?.join('\n') || ''}
+                        onChange={(e) => setProductForm({...productForm, benefits: e.target.value.split('\n')})}
+                        className="form-control"
+                        rows="5"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>How To Use (one step per line)</label>
+                      <textarea
+                        placeholder="Enter usage steps, one per line&#10;e.g., Cleanse your face thoroughly&#10;Apply a small amount to fingertips&#10;Massage onto face and neck"
+                        value={productForm.how_to_use?.join('\n') || ''}
+                        onChange={(e) => setProductForm({...productForm, how_to_use: e.target.value.split('\n')})}
+                        className="form-control"
+                        rows="5"
                       />
                     </div>
 
@@ -656,13 +780,54 @@ const AdminDashboard = () => {
             )}
 
             <div className="products-controls">
-              <input 
-                type="text"
-                placeholder="Search products..."
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                className="search-input"
-              />
+              <div className="filter-row">
+                <div className="filter-group">
+                  <label>Filter by Category:</label>
+                  <select 
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="category-filter"
+                  >
+                    {categories.map(cat => (
+                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label>Filter by Ingredient:</label>
+                  <select 
+                    value={ingredientFilter}
+                    onChange={(e) => setIngredientFilter(e.target.value)}
+                    className="category-filter"
+                  >
+                    {featuredIngredients.map(ing => (
+                      <option key={ing.value} value={ing.value}>{ing.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={showTrendingOnly}
+                      onChange={(e) => setShowTrendingOnly(e.target.checked)}
+                    />
+                    <span>Show Trending Only</span>
+                  </label>
+                </div>
+
+                <div className="filter-group search-group">
+                  <input 
+                    type="text"
+                    placeholder="Search products..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="search-input"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="products-grid">
@@ -682,6 +847,11 @@ const AdminDashboard = () => {
 
                   return (
                     <div key={product.id} className="product-card-admin">
+                      {product.is_trending && (
+                        <div className="trending-badge">
+                          <i className="fas fa-fire"></i> Trending
+                        </div>
+                      )}
                       <div className="product-image-wrapper">
                         {productImage ? (
                           <img 
@@ -713,7 +883,9 @@ const AdminDashboard = () => {
                             Stock: {product.stock}
                           </span>
                         </div>
-                        <div className="category-badge">{product.category || 'Uncategorized'}</div>
+                        <div className="category-badge">
+                          {product.category ? product.category.replace('_', ' ') : 'Uncategorized'}
+                        </div>
                         <div className="product-actions">
                           <button 
                             className="btn-edit-product"

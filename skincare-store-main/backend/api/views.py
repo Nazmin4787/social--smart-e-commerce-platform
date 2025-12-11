@@ -101,6 +101,11 @@ def create_product(request):
             stock=int(stock) if stock else 0,
             images=images,
             category=category,
+            is_trending=request.POST.get("is_trending") == "true",
+            ingredients=[i.strip() for i in request.POST.get("ingredients", "").split('\n') if i.strip()],
+            benefits=[b.strip() for b in request.POST.get("benefits", "").split('\n') if b.strip()],
+            how_to_use=[h.strip() for h in request.POST.get("how_to_use", "").split('\n') if h.strip()],
+            faqs=json.loads(request.POST.get("faqs", "[]")),
         )
         return JsonResponse({"id": p.id, "message": "Product created successfully"}, status=201)
     else:
@@ -124,6 +129,11 @@ def create_product(request):
             stock=int(body.get("stock", 0)),
             images=body.get("images", []),
             category=category,
+            is_trending=body.get("is_trending", False),
+            ingredients=[i.strip() for i in body.get("ingredients", []) if isinstance(i, str) and i.strip()],
+            benefits=[b.strip() for b in body.get("benefits", []) if isinstance(b, str) and b.strip()],
+            how_to_use=[h.strip() for h in body.get("how_to_use", []) if isinstance(h, str) and h.strip()],
+            faqs=body.get("faqs", []),
         )
         return JsonResponse({"id": p.id, "message": "Product created successfully"}, status=201)
 
@@ -1190,14 +1200,15 @@ def admin_product_update(request, product_id):
     except Product.DoesNotExist:
         return JsonResponse({'error': 'Product not found'}, status=404)
 
-    # Check if request has files (multipart/form-data)
-    if request.FILES:
-        # Handle file upload
+    # Check if request has multipart/form-data content type
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        # Handle multipart form data (with or without file uploads)
         title = request.POST.get("title")
         description = request.POST.get("description")
         price = request.POST.get("price")
         stock = request.POST.get("stock")
         category = request.POST.get("category")
+        is_trending = request.POST.get("is_trending")
         
         if title:
             product.title = sanitize_string(title, max_length=255)
@@ -1209,6 +1220,20 @@ def admin_product_update(request, product_id):
             product.stock = int(stock)
         if category:
             product.category = sanitize_string(category, max_length=100)
+        
+        # Handle is_trending - always update based on what's sent
+        # Checkbox sends "true" when checked, FormData doesn't include it when unchecked
+        product.is_trending = request.POST.get("is_trending") == "true"
+        
+        # Handle ingredients, benefits, and how_to_use - always update
+        ingredients = request.POST.get("ingredients", "")
+        product.ingredients = [i.strip() for i in ingredients.split('\n') if i.strip()] if ingredients else []
+        
+        benefits = request.POST.get("benefits", "")
+        product.benefits = [b.strip() for b in benefits.split('\n') if b.strip()] if benefits else []
+        
+        how_to_use = request.POST.get("how_to_use", "")
+        product.how_to_use = [h.strip() for h in how_to_use.split('\n') if h.strip()] if how_to_use else []
         
         # Handle new image uploads
         uploaded_files = request.FILES.getlist('images')
@@ -1259,8 +1284,16 @@ def admin_product_update(request, product_id):
             product.stock = int(body['stock'])
         if 'category' in body:
             product.category = sanitize_string(body['category'], max_length=100)
+        if 'is_trending' in body:
+            product.is_trending = body['is_trending']
         if 'images' in body:
             product.images = body['images']
+        if 'ingredients' in body:
+            product.ingredients = [i.strip() for i in body['ingredients'] if isinstance(i, str) and i.strip()]
+        if 'benefits' in body:
+            product.benefits = [b.strip() for b in body['benefits'] if isinstance(b, str) and b.strip()]
+        if 'how_to_use' in body:
+            product.how_to_use = [h.strip() for h in body['how_to_use'] if isinstance(h, str) and h.strip()]
 
         product.save()
         return JsonResponse({'id': product.id, 'message': 'Product updated successfully'})
