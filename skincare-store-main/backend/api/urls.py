@@ -84,6 +84,9 @@ urlpatterns = [
     path('social/notifications/mark-all-read/', views.mark_all_notifications_read),
     path('social/notifications/unread-count/', views.get_unread_notifications_count),
     
+    # Friends' Product Activities
+    path('social/friends-activities/', views.get_friends_product_activities),
+    
     # Chat / Messaging
     path('chat/conversations/', views.get_conversations),
     path('chat/conversations/<int:other_user_id>/', views.get_or_create_conversation),
@@ -97,4 +100,10 @@ urlpatterns = [
     path('allergies/check/<int:product_id>/', views.check_product_allergies),
     path('allergies/check-cart/', views.check_cart_allergies),
     path('allergies/update/', views.update_user_allergies),
+    
+    # Wallet
+    path('wallet/balance/', views.get_wallet_balance),
+    path('wallet/add-money/', views.add_money_to_wallet),
+    path('wallet/transactions/', views.get_wallet_transactions),
+    path('wallet/pay-order/', views.create_order_with_wallet),
 ]

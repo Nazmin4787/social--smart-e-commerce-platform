@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies, likeProduct, getLikedProducts } from '../api';
+import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies, likeProduct, getLikedProducts, getFriendsProductActivities } from '../api';
 import ShareButton from '../components/ShareButton';
 import AllergyAlertModal from '../components/AllergyAlertModal';
 import ProductCard from '../components/ProductCard';
@@ -23,10 +23,14 @@ const ProductDetailPage = () => {
   const [expandedAccordion, setExpandedAccordion] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [likedProducts, setLikedProducts] = useState([]);
+  const [friendsActivities, setFriendsActivities] = useState({});
 
   useEffect(() => {
     loadProduct();
-  }, [id]);
+    if (user) {
+      fetchFriendsActivities();
+    }
+  }, [id, user]);
 
   const loadProduct = async () => {
     setLoading(true);
@@ -182,6 +186,17 @@ const ProductDetailPage = () => {
     }
   };
 
+  const fetchFriendsActivities = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const data = await getFriendsProductActivities(token);
+      console.log('Friends activities data:', data);
+      setFriendsActivities(data.activities_by_product || {});
+    } catch (error) {
+      console.error('Error fetching friends activities:', error);
+    }
+  };
+
   const handleAddToCartFromCard = async (product) => {
     if (!user) return alert('Please login');
     try {
@@ -314,7 +329,7 @@ const ProductDetailPage = () => {
 
             {/* Price */}
             <div className="product-price-section">
-              <span className="product-price">${product.price}</span>
+              <span className="product-price">₹{product.price}</span>
             </div>
 
             {/* Description */}
@@ -576,7 +591,7 @@ const ProductDetailPage = () => {
         {/* Related Products Section */}
         {relatedProducts.length > 0 && (
           <div className="related-products-section">
-            <h2 className="related-products-title">Get Faster Results With</h2>
+            <h2 className="related-products-title">Related Items</h2>
             <div className="products-grid">
               {relatedProducts.map(relatedProduct => (
                 <ProductCard
@@ -585,6 +600,7 @@ const ProductDetailPage = () => {
                   onLike={handleLike}
                   onAddToCart={handleAddToCartFromCard}
                   isLiked={likedProducts.includes(relatedProduct.id)}
+                  friendsActivities={friendsActivities[relatedProduct.id] || []}
                 />
               ))}
             </div>

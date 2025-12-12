@@ -294,6 +294,17 @@ export async function shareProduct(token, productId, recipientId, message) {
 }
 
 // ============================================================================
+// SOCIAL FEATURES - FRIENDS' ACTIVITIES
+// ============================================================================
+export async function getFriendsProductActivities(token, productIds = null) {
+  let url = `${API_BASE}/social/friends-activities/`;
+  if (productIds && productIds.length > 0) {
+    url += `?product_ids=${productIds.join(',')}`;
+  }
+  return axios.get(url, getAuthHeaders(token)).then(r => r.data);
+}
+
+// ============================================================================
 // ALLERGY MANAGEMENT
 // ============================================================================
 export async function checkProductAllergies(token, productId) {
@@ -312,6 +323,31 @@ export async function updateUserAllergies(token, allergies) {
   return axios.put(
     `${API_BASE}/allergies/update/`,
     { allergies },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+// ============ Wallet API ============
+export async function getWalletBalance(token) {
+  return axios.get(`${API_BASE}/wallet/balance/`, getAuthHeaders(token)).then(r => r.data);
+}
+
+export async function addMoneyToWallet(token, amount) {
+  return axios.post(
+    `${API_BASE}/wallet/add-money/`,
+    { amount },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+export async function getWalletTransactions(token) {
+  return axios.get(`${API_BASE}/wallet/transactions/`, getAuthHeaders(token)).then(r => r.data);
+}
+
+export async function createOrderWithWallet(token, total, useWallet = false) {
+  return axios.post(
+    `${API_BASE}/wallet/pay-order/`,
+    { total, use_wallet: useWallet },
     getAuthHeaders(token)
   ).then(r => r.data);
 }

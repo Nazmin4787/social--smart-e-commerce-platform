@@ -1,18 +1,24 @@
 import React, { useState, useEffect, useContext } from 'react';
 import ProductCard from './ProductCard';
 import { AuthContext } from '../context/AuthContext';
-import { fetchProducts as getProducts, getLikedProducts, likeProduct, addToCart } from '../api';
+import { fetchProducts as getProducts, getLikedProducts, likeProduct, addToCart, getFriendsProductActivities } from '../api';
 
 const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = false, category = null, ingredient = null }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [likedProducts, setLikedProducts] = useState([]);
+  const [friendsActivities, setFriendsActivities] = useState({});
   const { user } = useContext(AuthContext);
 
   useEffect(() => {
+    console.log('ProductsSection - User:', user ? user.name : 'Not logged in');
     fetchProducts();
     if (user) {
+      console.log('ProductsSection - Fetching liked products and friends activities');
       fetchLikedProducts();
+      fetchFriendsActivities();
+    } else {
+      console.log('ProductsSection - User not logged in, skipping friends activities');
     }
   }, [user, category, ingredient]);
 
@@ -67,6 +73,20 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
       setLikedProducts(data.map(item => item.product.id));
     } catch (error) {
       console.error('Error fetching liked products:', error);
+    }
+  };
+
+  const fetchFriendsActivities = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      console.log('Fetching friends activities with token:', token ? 'Token exists' : 'No token');
+      const data = await getFriendsProductActivities(token);
+      console.log('Friends activities response:', data);
+      console.log('Activities by product:', data.activities_by_product);
+      setFriendsActivities(data.activities_by_product || {});
+    } catch (error) {
+      console.error('Error fetching friends activities:', error);
+      console.error('Error details:', error.response?.data);
     }
   };
 
@@ -132,6 +152,7 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
               onLike={handleLike}
               onAddToCart={handleAddToCart}
               isLiked={likedProducts.includes(product.id)}
+              friendsActivities={friendsActivities[product.id] || []}
             />
           ))}
         </div>

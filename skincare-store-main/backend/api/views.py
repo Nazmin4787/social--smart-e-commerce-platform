@@ -1,6 +1,7 @@
 import json
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
 from django.db import models
 from .utils import create_jwt, create_refresh_token, decode_jwt
 from .models import (
@@ -18,6 +19,8 @@ from .models import (
     UserFollow,
     Notification,
     ProductShare,
+    Wallet,
+    WalletTransaction,
 )
 from .validators import (
     validate_user_registration, 
@@ -2122,6 +2125,105 @@ def get_unread_notifications_count(request):
     return JsonResponse({"unread_count": unread_count})
 
 
+def get_time_ago(dt):
+    """Helper function to get human-readable time ago."""
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    now = timezone.now()
+    diff = now - dt
+    
+    if diff < timedelta(minutes=1):
+        return "just now"
+    elif diff < timedelta(hours=1):
+        minutes = int(diff.total_seconds() / 60)
+        return f"{minutes}m ago"
+    elif diff < timedelta(days=1):
+        hours = int(diff.total_seconds() / 3600)
+        return f"{hours}h ago"
+    elif diff < timedelta(days=7):
+        days = diff.days
+        return f"{days}d ago"
+    else:
+        weeks = diff.days // 7
+        return f"{weeks}w ago"
+
+
+@csrf_exempt
+def get_friends_product_activities(request):
+    """Get friends' activities on products (likes)."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    # Get authenticated user
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception as e:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get all users that current user follows (friends)
+    following_ids = list(UserFollow.objects.filter(follower=current_user).values_list('following_id', flat=True))
+    
+    if not following_ids:
+        return JsonResponse({"activities": [], "activities_by_product": {}})
+    
+    # Get product IDs from query param (optional - to filter activities for specific products)
+    product_ids_param = request.GET.get('product_ids')
+    product_ids = None
+    if product_ids_param:
+        try:
+            product_ids = [int(pid) for pid in product_ids_param.split(',')]
+        except ValueError:
+            pass
+    
+    activities = []
+    
+    # Get friends' liked products
+    liked_query = UserLikedProduct.objects.filter(
+        user_id__in=following_ids
+    ).select_related('user', 'product')
+    
+    if product_ids:
+        liked_query = liked_query.filter(product_id__in=product_ids)
+    
+    # Limit to recent activities (last 30 days)
+    from datetime import timedelta
+    from django.utils import timezone
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    liked_query = liked_query.filter(created_at__gte=thirty_days_ago).order_by('-created_at')[:50]
+    
+    for like in liked_query:
+        activities.append({
+            'type': 'liked',
+            'user': {
+                'id': like.user.id,
+                'name': like.user.name
+            },
+            'product_id': like.product.id,
+            'product_title': like.product.title,
+            'created_at': like.created_at.isoformat(),
+            'time_ago': get_time_ago(like.created_at)
+        })
+    
+    # Group by product_id for easy lookup
+    activities_by_product = {}
+    for activity in activities:
+        pid = activity['product_id']
+        if pid not in activities_by_product:
+            activities_by_product[pid] = []
+        activities_by_product[pid].append(activity)
+    
+    return JsonResponse({
+        "activities": activities,
+        "activities_by_product": activities_by_product
+    })
+
+
 # ============================================================================
 # CHAT / MESSAGING ENDPOINTS
 # ============================================================================
@@ -2745,3 +2847,210 @@ def get_banners(request):
     return JsonResponse({
         "banners": [banner.to_dict() for banner in banners]
     })
+
+
+# ============================================================================
+# WALLET ENDPOINTS
+# ============================================================================
+
+@csrf_exempt
+def get_wallet_balance(request):
+    """Get user's wallet balance"""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get or create wallet
+    wallet, created = Wallet.objects.get_or_create(user=current_user)
+    
+    return JsonResponse({
+        "wallet": wallet.to_dict()
+    })
+
+
+@csrf_exempt
+def add_money_to_wallet(request):
+    """Add money to wallet"""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        from decimal import Decimal
+        data = json.loads(request.body)
+        amount = Decimal(str(data.get('amount', 0)))
+        
+        if amount <= 0:
+            return JsonResponse({"error": "Amount must be greater than 0"}, status=400)
+        
+        # Get or create wallet
+        wallet, created = Wallet.objects.get_or_create(user=current_user)
+        
+        # Add money to wallet
+        wallet.balance += amount
+        wallet.save()
+        
+        # Create transaction record
+        WalletTransaction.objects.create(
+            wallet=wallet,
+            transaction_type='credit',
+            amount=amount,
+            status='completed',
+            description=f"Added ${amount} to wallet"
+        )
+        
+        return JsonResponse({
+            "success": True,
+            "wallet": wallet.to_dict(),
+            "message": f"${amount} added to your wallet successfully"
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def get_wallet_transactions(request):
+    """Get wallet transaction history"""
+    if request.method != 'GET':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    # Get or create wallet
+    wallet, created = Wallet.objects.get_or_create(user=current_user)
+    
+    # Get transactions
+    transactions = WalletTransaction.objects.filter(wallet=wallet)
+    
+    return JsonResponse({
+        "transactions": [t.to_dict() for t in transactions],
+        "wallet_balance": float(wallet.balance)
+    })
+
+
+@csrf_exempt
+def create_order_with_wallet(request):
+    """Create order and pay using wallet"""
+    if request.method != 'POST':
+        return HttpResponseBadRequest()
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        current_user = AppUser.objects.get(pk=payload['user_id'])
+    except Exception:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        from decimal import Decimal
+        data = json.loads(request.body)
+        order_total = Decimal(str(data.get('total', 0)))
+        use_wallet = data.get('use_wallet', False)
+        
+        if order_total <= 0:
+            return JsonResponse({"error": "Invalid order total"}, status=400)
+        
+        # Get or create wallet
+        wallet, created = Wallet.objects.get_or_create(user=current_user)
+        
+        # Check if using wallet and has sufficient balance
+        if use_wallet:
+            if wallet.balance < order_total:
+                return JsonResponse({
+                    "error": "Insufficient wallet balance",
+                    "wallet_balance": float(wallet.balance),
+                    "required": order_total
+                }, status=400)
+            
+            # Deduct from wallet
+            wallet.balance -= order_total
+            wallet.save()
+            
+            # Create order
+            order = Order.objects.create(
+                user=current_user,
+                total=order_total,
+                status='confirmed'
+            )
+            
+            # Create wallet transaction
+            WalletTransaction.objects.create(
+                wallet=wallet,
+                transaction_type='debit',
+                amount=order_total,
+                status='completed',
+                description=f"Payment for Order #{order.id}",
+                order=order
+            )
+            
+            # Clear cart
+            try:
+                cart = Cart.objects.get(user=current_user)
+                cart_items = CartItem.objects.filter(cart=cart)
+                
+                # Create order items
+                for item in cart_items:
+                    OrderItem.objects.create(
+                        order=order,
+                        product=item.product,
+                        qty=item.qty,
+                        price=item.product.price
+                    )
+                
+                # Clear cart
+                cart_items.delete()
+            except Cart.DoesNotExist:
+                pass
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "wallet_balance": float(wallet.balance),
+                "message": "Order placed successfully using wallet"
+            })
+        else:
+            # Regular order creation (non-wallet payment)
+            order = Order.objects.create(
+                user=current_user,
+                total=order_total,
+                status='created'
+            )
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "message": "Order created successfully"
+            })
+            
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+

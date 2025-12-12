@@ -254,6 +254,13 @@ const ProfilePage = () => {
                 <span>My Orders</span>
               </button>
               <button 
+                className={`profile-nav-item ${activeTab === 'wallet' ? 'active' : ''}`}
+                onClick={() => navigate('/wallet')}
+              >
+                <i className="fas fa-wallet"></i>
+                <span>My Wallet</span>
+              </button>
+              <button 
                 className={`profile-nav-item ${activeTab === 'track' ? 'active' : ''}`}
                 onClick={() => navigate('/orders')}
               >

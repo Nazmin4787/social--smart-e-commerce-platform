@@ -453,7 +453,7 @@ const AdminDashboard = () => {
               <div className="stat-card">
                 <i className="fas fa-dollar-sign stat-icon"></i>
                 <div>
-                  <h3>${stats.total_revenue || 0}</h3>
+                  <h3>₹{stats.total_revenue || 0}</h3>
                   <p>Total Revenue</p>
                 </div>
               </div>
@@ -486,7 +486,7 @@ const AdminDashboard = () => {
                           <tr key={order.id}>
                             <td>#{order.id}</td>
                             <td>{order.user?.name || 'N/A'}</td>
-                            <td>${order.total}</td>
+                            <td>₹{order.total}</td>
                             <td><span className={`status-badge ${order.status}`}>{order.status}</span></td>
                             <td>{new Date(order.created_at).toLocaleDateString()}</td>
                           </tr>
@@ -554,7 +554,7 @@ const AdminDashboard = () => {
                         <td>#{order.id}</td>
                         <td>{order.user?.name || 'N/A'}</td>
                         <td>{order.user?.email || 'N/A'}</td>
-                        <td>${order.total}</td>
+                        <td>₹{order.total}</td>
                         <td>
                           <select 
                             value={order.status} 
@@ -637,7 +637,7 @@ const AdminDashboard = () => {
 
                     <div className="form-row">
                       <div className="form-group">
-                        <label>Price ($) *</label>
+                        <label>Price (₹) *</label>
                         <input
                           type="number"
                           name="price"
@@ -878,7 +878,7 @@ const AdminDashboard = () => {
                         <h3>{product.title}</h3>
                         <p className="product-description">{product.description}</p>
                         <div className="product-meta">
-                          <span className="price">${product.price}</span>
+                          <span className="price">₹{product.price}</span>
                           <span className={`stock ${product.stock < 10 ? 'low' : ''}`}>
                             Stock: {product.stock}
                           </span>

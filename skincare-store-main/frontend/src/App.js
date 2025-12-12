@@ -16,6 +16,7 @@ import UserSearchPage from './pages/UserSearchPage';
 import NotificationsPage from './pages/NotificationsPage';
 import SocialPage from './pages/SocialPage';
 import MessagesPage from './pages/MessagesPage';
+import WalletPage from './pages/WalletPage';
 import './styles.css';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
             <Route path="/products/:id" element={<ProductDetailPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/wallet" element={<WalletPage />} />
             <Route path="/book/:id" element={<BookingPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/social" element={<SocialPage />} />

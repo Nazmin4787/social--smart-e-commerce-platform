@@ -2,8 +2,9 @@ import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import ShareButton from './ShareButton';
+import FriendsActivity from './FriendsActivity';
 
-const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
+const ProductCard = ({ product, onLike, onAddToCart, isLiked, friendsActivities }) => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   
@@ -90,7 +91,7 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
         
         <div className="product-footer">
           <div className="product-pricing">
-            <span className="product-price">${product.price}</span>
+            <span className="product-price">₹{product.price}</span>
             {product.stock > 0 && (
               <span className="stock-indicator">
                 <i className="fas fa-check-circle"></i> In Stock
@@ -113,6 +114,10 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked }) => {
             </div>
           )}
         </div>
+        
+        {friendsActivities && friendsActivities.length > 0 && (
+          <FriendsActivity activities={friendsActivities} />
+        )}
       </div>
     </div>
   );

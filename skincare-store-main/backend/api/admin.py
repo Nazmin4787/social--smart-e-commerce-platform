@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Banner, UserFollow, Notification, ProductShare
-from .models import Order, OrderItem, Address, Product, AppUser
+from .models import Order, OrderItem, Address, Product, AppUser, Wallet, WalletTransaction
 
 
 class OrderItemInline(admin.TabularInline):
@@ -223,3 +223,50 @@ class AppUserAdmin(admin.ModelAdmin):
         return format_html('<span style="color: #1B5E47;">✓ {} allergies</span>', count)
     
     allergy_count.short_description = 'Allergies'
+
+
+@admin.register(Wallet)
+class WalletAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user_name', 'balance_display', 'transaction_count', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('user__name', 'user__email')
+    ordering = ('-created_at',)
+    readonly_fields = ('user', 'created_at', 'updated_at')
+    
+    def user_name(self, obj):
+        return f"{obj.user.name} ({obj.user.email})"
+    
+    def balance_display(self, obj):
+        return format_html('<span style="font-weight:bold; color:#047857;">₹{}</span>', obj.balance)
+    
+    def transaction_count(self, obj):
+        count = obj.transactions.count()
+        return format_html('<span>{} transactions</span>', count)
+    
+    user_name.short_description = 'User'
+    balance_display.short_description = 'Balance'
+    transaction_count.short_description = 'Transactions'
+
+
+@admin.register(WalletTransaction)
+class WalletTransactionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'wallet_user', 'transaction_type', 'amount_display', 'status', 'description_short', 'created_at')
+    list_filter = ('transaction_type', 'status', 'created_at')
+    search_fields = ('wallet__user__name', 'wallet__user__email', 'description')
+    ordering = ('-created_at',)
+    readonly_fields = ('wallet', 'transaction_type', 'amount', 'status', 'description', 'order', 'created_at')
+    
+    def wallet_user(self, obj):
+        return f"{obj.wallet.user.name}"
+    
+    def amount_display(self, obj):
+        color = '#047857' if obj.transaction_type == 'credit' else '#dc2626'
+        prefix = '+' if obj.transaction_type == 'credit' else '-'
+        return format_html('<span style="font-weight:bold; color:{};">{} ₹{}</span>', color, prefix, obj.amount)
+    
+    def description_short(self, obj):
+        return (obj.description[:50] + '...') if len(obj.description) > 50 else obj.description
+    
+    wallet_user.short_description = 'User'
+    amount_display.short_description = 'Amount'
+    description_short.short_description = 'Description'
