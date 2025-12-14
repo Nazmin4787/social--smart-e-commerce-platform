@@ -76,18 +76,25 @@ const UserProfilePage = () => {
           <div className="profile-info">
             <div className="profile-name-section">
               <h1>{profile.name}</h1>
-              {!isOwnProfile && (
-                <FollowButton
-                  userId={parseInt(userId)}
-                  initialIsFollowing={profile.is_following}
-                  onFollowChange={handleFollowChange}
-                />
-              )}
-              {isOwnProfile && (
-                <Link to="/profile" className="btn-edit-profile">
-                  <i className="fas fa-edit"></i> Edit Profile
-                </Link>
-              )}
+              <div className="profile-action-buttons">
+                {!isOwnProfile && (
+                  <>
+                    <FollowButton
+                      userId={parseInt(userId)}
+                      initialIsFollowing={profile.is_following}
+                      onFollowChange={handleFollowChange}
+                    />
+                    <Link to="/messages" className="btn-message">
+                      <i className="fas fa-comment-dots"></i> Message
+                    </Link>
+                  </>
+                )}
+                {isOwnProfile && (
+                  <Link to="/profile" className="btn-edit-profile">
+                    <i className="fas fa-edit"></i> Edit Profile
+                  </Link>
+                )}
+              </div>
             </div>
 
             <div className="profile-stats">

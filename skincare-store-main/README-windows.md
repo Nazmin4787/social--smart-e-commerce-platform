@@ -1,5 +1,5 @@
 ````markdown
-# Skincare Store (Windows) — Quick Start
+# Novacell (Windows) — Quick Start
 
 ## Prerequisites
 - Python 3.9+ (installed and on `PATH`)

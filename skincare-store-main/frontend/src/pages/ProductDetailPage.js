@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies, likeProduct, getLikedProducts, getFriendsProductActivities } from '../api';
+import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies, likeProduct, getLikedProducts, getFriendsProductActivities, getFriendsPurchased } from '../api';
 import ShareButton from '../components/ShareButton';
 import AllergyAlertModal from '../components/AllergyAlertModal';
 import ProductCard from '../components/ProductCard';
@@ -24,6 +24,7 @@ const ProductDetailPage = () => {
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [likedProducts, setLikedProducts] = useState([]);
   const [friendsActivities, setFriendsActivities] = useState({});
+  const [friendsPurchased, setFriendsPurchased] = useState([]);
 
   useEffect(() => {
     loadProduct();
@@ -197,6 +198,24 @@ const ProductDetailPage = () => {
     }
   };
 
+  const fetchFriendsPurchased = async () => {
+    if (!user || !product) return;
+    try {
+      const token = localStorage.getItem('accessToken');
+      const data = await getFriendsPurchased(product.id, token);
+      console.log('Friends purchased data:', data);
+      setFriendsPurchased(data.friends || []);
+    } catch (error) {
+      console.error('Error fetching friends who purchased:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (product && user) {
+      fetchFriendsPurchased();
+    }
+  }, [product, user]);
+
   const handleAddToCartFromCard = async (product) => {
     if (!user) return alert('Please login');
     try {
@@ -331,6 +350,28 @@ const ProductDetailPage = () => {
             <div className="product-price-section">
               <span className="product-price">₹{product.price}</span>
             </div>
+
+            {/* Expiry Date */}
+            {product.expiry_date && (
+              <div className="product-expiry-info">
+                <div className="expiry-item">
+                  <i className="fas fa-calendar-alt"></i>
+                  <div className="expiry-details">
+                    <span className="expiry-label">Expiry Date</span>
+                    <span className="expiry-date">{new Date(product.expiry_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                  </div>
+                </div>
+                {product.manufacturing_date && (
+                  <div className="expiry-item">
+                    <i className="fas fa-industry"></i>
+                    <div className="expiry-details">
+                      <span className="expiry-label">Manufactured</span>
+                      <span className="expiry-date">{new Date(product.manufacturing_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Description */}
             <div className="product-description">
@@ -520,6 +561,32 @@ const ProductDetailPage = () => {
                 </div>
               </div>
             </div>
+
+            {/* Friends Who Purchased */}
+            {user && friendsPurchased.length > 0 && (
+              <div className="friends-purchased-section">
+                <h4 className="friends-purchased-title">
+                  <i className="fas fa-users"></i> Friends who purchased this
+                </h4>
+                <div className="friends-purchased-list">
+                  {friendsPurchased.map(friend => (
+                    <div key={friend.id} className="friend-purchased-item">
+                      <div className="friend-info">
+                        <div className="friend-avatar">
+                          {friend.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="friend-details">
+                          <span className="friend-name">{friend.name}</span>
+                          <span className="friend-purchase-date">
+                            Purchased {new Date(friend.purchased_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

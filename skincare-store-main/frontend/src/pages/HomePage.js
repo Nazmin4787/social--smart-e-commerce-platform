@@ -58,7 +58,7 @@ const HomePage = () => {
       </main>
       <footer className="footer">
         <div className="footer-content">
-          <p className="footer-text">&copy; 2025 Skincare Store. All rights reserved.</p>
+          <p className="footer-text">&copy; 2025 Novacell. All rights reserved.</p>
           <div className="footer-links">
             <a href="/privacy" className="footer-link">Privacy Policy</a>
             <a href="/terms" className="footer-link">Terms of Service</a>

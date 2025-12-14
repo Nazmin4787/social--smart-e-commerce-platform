@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from api.models import AppUser
 
 class Command(BaseCommand):
-    help = 'Creates an admin user for the skincare store'
+    help = 'Creates an admin user for Novacell'
 
     def add_arguments(self, parser):
         parser.add_argument('--email', type=str, default='admin@example.com', help='Admin email')

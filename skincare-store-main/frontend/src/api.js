@@ -186,6 +186,27 @@ export async function getProfile(token) {
   return axios.get(`${API_BASE}/profile/`, getAuthHeaders(token)).then(r => r.data);
 }
 
+export async function updateProfile(token, profileData) {
+  return axios.put(`${API_BASE}/profile/update/`, profileData, getAuthHeaders(token)).then(r => r.data);
+}
+
+// Addresses
+export async function getAddresses(token) {
+  return axios.get(`${API_BASE}/addresses/`, getAuthHeaders(token)).then(r => r.data);
+}
+
+export async function createAddress(token, addressData) {
+  return axios.post(`${API_BASE}/addresses/create/`, addressData, getAuthHeaders(token)).then(r => r.data);
+}
+
+export async function updateAddress(token, addressId, addressData) {
+  return axios.put(`${API_BASE}/addresses/${addressId}/`, addressData, getAuthHeaders(token)).then(r => r.data);
+}
+
+export async function deleteAddress(token, addressId) {
+  return axios.delete(`${API_BASE}/addresses/${addressId}/delete/`, getAuthHeaders(token)).then(r => r.data);
+}
+
 // Admin APIs
 export async function getDashboardStats(token) {
   return axios.get(`${API_BASE}/admin/dashboard/`, getAuthHeaders(token)).then(r => r.data);
@@ -329,7 +350,8 @@ export async function updateUserAllergies(token, allergies) {
 
 // ============ Wallet API ============
 export async function getWalletBalance(token) {
-  return axios.get(`${API_BASE}/wallet/balance/`, getAuthHeaders(token)).then(r => r.data);
+  // Add timestamp to prevent caching
+  return axios.get(`${API_BASE}/wallet/balance/?t=${Date.now()}`, getAuthHeaders(token)).then(r => r.data);
 }
 
 export async function addMoneyToWallet(token, amount) {
@@ -350,4 +372,71 @@ export async function createOrderWithWallet(token, total, useWallet = false) {
     { total, use_wallet: useWallet },
     getAuthHeaders(token)
   ).then(r => r.data);
+}
+
+// ========== PAYMENT & ORDERS ==========
+// Create payment order (supports Cashfree, Wallet, COD)
+export async function createPaymentOrder(token, paymentMethod, shippingAddressId, billingAddressId, returnUrl) {
+  return axios.post(
+    `${API_BASE}/payment/create-order/`,
+    {
+      payment_method: paymentMethod,
+      shipping_address_id: shippingAddressId,
+      billing_address_id: billingAddressId,
+      return_url: returnUrl
+    },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+// Verify payment status
+export async function verifyPayment(token, orderNumber) {
+  return axios.post(
+    `${API_BASE}/payment/verify/`,
+    { order_number: orderNumber },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
+// Get user's orders
+export async function getUserOrders(token) {
+  return axios.get(`${API_BASE}/orders/my-orders/`, getAuthHeaders(token)).then(r => r.data);
+}
+
+// Get specific order details
+export async function getOrderDetail(token, orderId) {
+  return axios.get(`${API_BASE}/orders/${orderId}/`, getAuthHeaders(token)).then(r => r.data);
+}
+
+// Load Cashfree SDK
+export function loadCashfreeSDK() {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded and initialized
+    if (window.cashfree && typeof window.cashfree.checkout === 'function') {
+      resolve(window.cashfree);
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.async = true;
+    script.onload = () => {
+      // Initialize Cashfree with sandbox environment
+      if (window.Cashfree) {
+        window.cashfree = window.Cashfree({
+          mode: "sandbox" // Use "production" for live
+        });
+        resolve(window.cashfree);
+      } else {
+        reject(new Error('Cashfree SDK failed to load'));
+      }
+    };
+    script.onerror = () => reject(new Error('Failed to load Cashfree SDK'));
+    document.body.appendChild(script);
+  });
+}
+
+// Get friends who purchased a product
+export async function getFriendsPurchased(productId, token) {
+  return axios.get(`${API_BASE}/products/${productId}/friends-purchased/`, getAuthHeaders(token)).then(r => r.data);
 }

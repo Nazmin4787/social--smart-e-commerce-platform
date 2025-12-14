@@ -16,7 +16,7 @@ const AboutSection = () => {
       console.error('Error fetching about data:', error);
       // Set default data if API fails
       setAboutData({
-        company_name: 'Skincare Store',
+        company_name: 'Novacell',
         description: 'Your trusted destination for premium skincare products. We believe in natural beauty and provide high-quality products to help you achieve healthy, glowing skin.',
         mission: 'To provide accessible, effective skincare solutions that enhance natural beauty and promote skin health.',
         contact: {
@@ -39,7 +39,7 @@ const AboutSection = () => {
         <div className="about-content">
           <div className="about-text">
             <h2>About Us</h2>
-            <h3>{aboutData?.company_name || 'Skincare Store'}</h3>
+            <h3>{aboutData?.company_name || 'Novacell'}</h3>
             <p className="about-description">
               {aboutData?.description || 'Your trusted destination for premium skincare products. We believe in natural beauty and provide high-quality products to help you achieve healthy, glowing skin.'}
             </p>

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
 import ProductCard from './ProductCard';
 import { AuthContext } from '../context/AuthContext';
-import { fetchProducts as getProducts, getLikedProducts, likeProduct, addToCart, getFriendsProductActivities } from '../api';
+import { fetchProducts as getProducts, getLikedProducts, likeProduct, addToCart, getFriendsProductActivities, getFriendsPurchased } from '../api';
 
 const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = false, category = null, ingredient = null }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [likedProducts, setLikedProducts] = useState([]);
   const [friendsActivities, setFriendsActivities] = useState({});
+  const [friendsPurchasedByProduct, setFriendsPurchasedByProduct] = useState({});
   const { user } = useContext(AuthContext);
 
   useEffect(() => {
@@ -21,6 +22,13 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
       console.log('ProductsSection - User not logged in, skipping friends activities');
     }
   }, [user, category, ingredient]);
+
+  useEffect(() => {
+    // Fetch friends purchased for each product
+    if (user && products.length > 0) {
+      fetchAllFriendsPurchased();
+    }
+  }, [user, products]);
 
   const fetchProducts = async () => {
     try {
@@ -90,6 +98,32 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
     }
   };
 
+  const fetchAllFriendsPurchased = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const purchasedData = {};
+      
+      // Fetch friends purchased for each product
+      await Promise.all(
+        products.map(async (product) => {
+          try {
+            const data = await getFriendsPurchased(product.id, token);
+            if (data.friends && data.friends.length > 0) {
+              purchasedData[product.id] = data.friends;
+            }
+          } catch (error) {
+            console.error(`Error fetching friends purchased for product ${product.id}:`, error);
+          }
+        })
+      );
+      
+      console.log('Friends purchased data:', purchasedData);
+      setFriendsPurchasedByProduct(purchasedData);
+    } catch (error) {
+      console.error('Error fetching friends purchased:', error);
+    }
+  };
+
   const handleLike = async (productId) => {
     if (!user) {
       alert('Please login to like products');
@@ -153,6 +187,7 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
               onAddToCart={handleAddToCart}
               isLiked={likedProducts.includes(product.id)}
               friendsActivities={friendsActivities[product.id] || []}
+              friendsPurchased={friendsPurchasedByProduct[product.id] || []}
             />
           ))}
         </div>

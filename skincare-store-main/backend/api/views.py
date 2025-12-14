@@ -1038,7 +1038,7 @@ def toggle_like_product(request):
 def about_us(request):
     """Get about us information."""
     about_data = {
-        "company_name": "Skincare Store",
+        "company_name": "Novacell",
         "description": "Your trusted destination for premium skincare products. We believe in natural beauty and provide high-quality products to help you achieve healthy, glowing skin.",
         "mission": "To provide accessible, effective skincare solutions that enhance natural beauty and promote skin health.",
         "founded": "2024",

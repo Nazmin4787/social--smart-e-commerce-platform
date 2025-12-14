@@ -4,7 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import ShareButton from './ShareButton';
 import FriendsActivity from './FriendsActivity';
 
-const ProductCard = ({ product, onLike, onAddToCart, isLiked, friendsActivities }) => {
+const ProductCard = ({ product, onLike, onAddToCart, isLiked, friendsActivities, friendsPurchased }) => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   
@@ -115,9 +115,9 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked, friendsActivities 
           )}
         </div>
         
-        {friendsActivities && friendsActivities.length > 0 && (
-          <FriendsActivity activities={friendsActivities} />
-        )}
+        {(friendsActivities && friendsActivities.length > 0) || (friendsPurchased && friendsPurchased.length > 0) ? (
+          <FriendsActivity activities={friendsActivities} friendsPurchased={friendsPurchased} />
+        ) : null}
       </div>
     </div>
   );

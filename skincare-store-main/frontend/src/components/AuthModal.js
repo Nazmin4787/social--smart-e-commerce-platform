@@ -139,7 +139,35 @@ const AuthModal = ({ onClose }) => {
                 More than 65 Lakh+ Happy Customers
               </div>
               <div className="auth-logo-center">
-                <span className="auth-logo-text">SKINCARE STORE</span>
+                <div className="auth-logo-container">
+                  <div className="auth-logo-icon">
+                    <svg viewBox="0 0 50 50" className="auth-logo-svg">
+                      <defs>
+                        <linearGradient id="authLogoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" style={{stopColor: '#10B981', stopOpacity: 1}} />
+                          <stop offset="50%" style={{stopColor: '#059669', stopOpacity: 1}} />
+                          <stop offset="100%" style={{stopColor: '#047857', stopOpacity: 1}} />
+                        </linearGradient>
+                        <linearGradient id="authPetalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" style={{stopColor: '#34D399', stopOpacity: 0.9}} />
+                          <stop offset="100%" style={{stopColor: '#10B981', stopOpacity: 0.9}} />
+                        </linearGradient>
+                      </defs>
+                      <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#authPetalGradient)" transform="rotate(-30 25 25)" />
+                      <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#authPetalGradient)" transform="rotate(30 25 25)" />
+                      <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#authPetalGradient)" transform="rotate(90 25 25)" />
+                      <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#authLogoGradient)" transform="rotate(-90 25 25)" />
+                      <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#authLogoGradient)" transform="rotate(150 25 25)" />
+                      <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#authLogoGradient)" transform="rotate(210 25 25)" />
+                      <circle cx="25" cy="25" r="7" fill="url(#authLogoGradient)" />
+                      <circle cx="25" cy="25" r="4" fill="#FCD34D" opacity="0.8" />
+                      <circle cx="15" cy="15" r="1.5" fill="#FCD34D" opacity="0.9" />
+                      <circle cx="35" cy="15" r="1.5" fill="#FCD34D" opacity="0.9" />
+                      <circle cx="25" cy="10" r="1" fill="white" opacity="0.8" />
+                    </svg>
+                  </div>
+                  <span className="auth-logo-text">NOVACELL</span>
+                </div>
               </div>
               <div className="auth-hero-image">
                 <div className="auth-placeholder-icon">

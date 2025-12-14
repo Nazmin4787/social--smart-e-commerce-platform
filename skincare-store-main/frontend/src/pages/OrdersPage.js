@@ -30,8 +30,10 @@ const OrdersPage = () => {
         // Transform backend data to match frontend expectations
         const transformedOrders = data.map(order => ({
           id: order.id,
+          order_number: order.order_number,
           created_at: order.created_at,
           status: order.status || 'pending',
+          payment_status: order.payment_status || 'pending',
           total: order.total,
           items: order.items.map(item => ({
             product_title: item.product.title,
@@ -49,6 +51,17 @@ const OrdersPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePayNow = async (orderId, orderNumber) => {
+    // Redirect to payment page with order details
+    navigate(`/payment/${orderId}`, { 
+      state: { 
+        orderId, 
+        orderNumber,
+        returnUrl: '/orders'
+      } 
+    });
   };
 
   const getImageUrl = (imagePath) => {
@@ -166,7 +179,17 @@ const OrdersPage = () => {
                   <button className="btn-secondary" onClick={() => navigate(`/orders/${order.id}`)}>
                     View Details
                   </button>
-                  {order.status?.toLowerCase() === 'pending' && (
+                  {(order.payment_status === 'pending' || order.payment_status === 'failed') && (
+                    <button 
+                      className="btn-primary" 
+                      onClick={() => handlePayNow(order.id, order.order_number)}
+                      style={{ marginLeft: '10px' }}
+                    >
+                      <i className="fas fa-credit-card" style={{ marginRight: '8px' }}></i>
+                      Pay Now
+                    </button>
+                  )}
+                  {order.status?.toLowerCase() === 'pending' && order.payment_status !== 'pending' && (
                     <button className="btn-cancel">Cancel Order</button>
                   )}
                 </div>

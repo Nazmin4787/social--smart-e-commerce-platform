@@ -930,7 +930,7 @@ const AdminDashboard = () => {
                   <label>Banner Title *</label>
                   <input 
                     type="text"
-                    placeholder="e.g., Welcome to Our Skincare Store"
+                    placeholder="e.g., Welcome to Our Novacell Store"
                     value={bannerForm.hero_title || ''}
                     onChange={(e) => setBannerForm({...bannerForm, hero_title: e.target.value})}
                     required

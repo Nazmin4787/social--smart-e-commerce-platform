@@ -9,6 +9,9 @@ import CartPage from './pages/CartPage';
 import BookingPage from './pages/BookingPage';
 import AdminDashboard from './pages/AdminDashboard';
 import OrdersPage from './pages/OrdersPage';
+import OrderDetailPage from './pages/OrderDetailPage';
+import CheckoutPage from './pages/CheckoutPage';
+import PaymentPage from './pages/PaymentPage';
 import UserProfilePage from './pages/UserProfilePage';
 import FollowersPage from './pages/FollowersPage';
 import FollowingPage from './pages/FollowingPage';
@@ -29,7 +32,11 @@ function App() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/products/:id" element={<ProductDetailPage />} />
             <Route path="/cart" element={<CartPage />} />
+            <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+            <Route path="/payment/:orderId" element={<PaymentPage />} />
+            <Route path="/payment/success" element={<OrderDetailPage />} />
             <Route path="/wallet" element={<WalletPage />} />
             <Route path="/book/:id" element={<BookingPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
