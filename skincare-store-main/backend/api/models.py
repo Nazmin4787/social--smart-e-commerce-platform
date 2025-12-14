@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password, check_password
+from datetime import datetime, timedelta
 
 
 class Product(models.Model):
@@ -14,6 +15,8 @@ class Product(models.Model):
     benefits = models.JSONField(default=list, blank=True)  # List of product benefits
     how_to_use = models.JSONField(default=list, blank=True)  # List of usage instructions
     faqs = models.JSONField(default=list, blank=True)  # List of FAQs with question and answer
+    expiry_date = models.DateField(null=True, blank=True)  # Product expiry date
+    manufacturing_date = models.DateField(null=True, blank=True)  # Manufacturing date
 
     def to_dict(self):
         return {
@@ -29,6 +32,8 @@ class Product(models.Model):
             'benefits': self.benefits,
             'how_to_use': self.how_to_use,
             'faqs': self.faqs,
+            'expiry_date': self.expiry_date.isoformat() if self.expiry_date else None,
+            'manufacturing_date': self.manufacturing_date.isoformat() if self.manufacturing_date else None,
             'average_rating': self.average_rating(),
             'reviews': [r.to_dict() for r in getattr(self, 'reviews_cache', self.reviews.all())[:10]] if hasattr(self, 'reviews') else [],
         }
@@ -115,10 +120,52 @@ class CartItem(models.Model):
 
 
 class Order(models.Model):
-    user = models.ForeignKey(AppUser, on_delete=models.CASCADE)
+    ORDER_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('processing', 'Processing'),
+        ('shipped', 'Shipped'),
+        ('delivered', 'Delivered'),
+        ('cancelled', 'Cancelled'),
+        ('refunded', 'Refunded'),
+    ]
+    
+    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name='orders')
+    order_number = models.CharField(max_length=50, blank=True, null=True)
     total = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=50, default='created')
+    status = models.CharField(max_length=50, choices=ORDER_STATUS_CHOICES, default='pending')
+    payment_status = models.CharField(max_length=50, default='pending')
+    shipping_address = models.ForeignKey('Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='shipping_orders')
+    billing_address = models.ForeignKey('Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='billing_orders')
+    tracking_number = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            import uuid
+            self.order_number = f"ORD{uuid.uuid4().hex[:10].upper()}"
+        super().save(*args, **kwargs)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'order_number': self.order_number,
+            'total': float(self.total),
+            'status': self.status,
+            'payment_status': self.payment_status,
+            'items': [item.to_dict() for item in self.items.all()],
+            'shipping_address': self.shipping_address.to_dict() if self.shipping_address else None,
+            'billing_address': self.billing_address.to_dict() if self.billing_address else None,
+            'tracking_number': self.tracking_number,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
 
 
 class OrderItem(models.Model):
@@ -126,6 +173,62 @@ class OrderItem(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     qty = models.IntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product': self.product.to_dict() if self.product else None,
+            'qty': self.qty,
+            'price': float(self.price),
+            'subtotal': float(self.price * self.qty),
+        }
+
+
+class Payment(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('initiated', 'Initiated'),
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    PAYMENT_METHOD_CHOICES = [
+        ('cashfree', 'Cashfree'),
+        ('wallet', 'Wallet'),
+        ('cod', 'Cash on Delivery'),
+    ]
+    
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payments')
+    payment_id = models.CharField(max_length=255, blank=True)  # Cashfree payment ID
+    cashfree_order_id = models.CharField(max_length=255, blank=True)  # Cashfree order ID
+    payment_method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES, default='cashfree')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=50, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    payment_session_id = models.CharField(max_length=255, blank=True)
+    payment_link = models.URLField(blank=True)
+    transaction_data = models.JSONField(default=dict, blank=True)  # Store Cashfree response
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'order_id': self.order.id,
+            'order_number': self.order.order_number,
+            'payment_id': self.payment_id,
+            'cashfree_order_id': self.cashfree_order_id,
+            'payment_method': self.payment_method,
+            'amount': float(self.amount),
+            'status': self.status,
+            'payment_session_id': self.payment_session_id,
+            'payment_link': self.payment_link,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
 
 
 class Address(models.Model):
@@ -599,7 +702,7 @@ class Banner(models.Model):
 
 class Wallet(models.Model):
     user = models.OneToOneField(AppUser, on_delete=models.CASCADE, related_name='wallet')
-    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    balance = models.DecimalField(max_digits=10, decimal_places=2, default=2000.00)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

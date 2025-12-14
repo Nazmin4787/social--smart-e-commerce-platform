@@ -21,6 +21,7 @@ from .models import (
     ProductShare,
     Wallet,
     WalletTransaction,
+    Payment,
 )
 from .validators import (
     validate_user_registration, 
@@ -3054,3 +3055,632 @@ def create_order_with_wallet(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
+
+# ==================== CASHFREE PAYMENT ENDPOINTS ====================
+
+@csrf_exempt
+def create_payment_order(request):
+    """Create order and initialize Cashfree payment"""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST method required"}, status=405)
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        user_id = payload.get('user_id')
+        current_user = AppUser.objects.get(pk=user_id)
+    except:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        payment_method = data.get('payment_method', 'cashfree')
+        shipping_address_id = data.get('shipping_address_id')
+        billing_address_id = data.get('billing_address_id')
+        
+        # Get cart items
+        cart = Cart.objects.get(user=current_user)
+        cart_items = CartItem.objects.filter(cart=cart)
+        
+        if not cart_items.exists():
+            return JsonResponse({"error": "Cart is empty"}, status=400)
+        
+        # Calculate total
+        order_total = sum(item.product.price * item.qty for item in cart_items)
+        
+        # Get addresses
+        shipping_address = None
+        billing_address = None
+        if shipping_address_id:
+            shipping_address = Address.objects.get(id=shipping_address_id, user=current_user)
+        if billing_address_id:
+            billing_address = Address.objects.get(id=billing_address_id, user=current_user)
+        
+        # Create order
+        order = Order.objects.create(
+            user=current_user,
+            total=order_total,
+            status='pending',
+            payment_status='pending',
+            shipping_address=shipping_address,
+            billing_address=billing_address
+        )
+        
+        # Create order items
+        for item in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                product=item.product,
+                qty=item.qty,
+                price=item.product.price
+            )
+        
+        # Handle payment method
+        if payment_method == 'cod':
+            # Cash on Delivery
+            order.payment_status = 'cod'
+            order.status = 'confirmed'
+            order.save()
+            
+            # Clear cart
+            cart_items.delete()
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "payment_method": "cod",
+                "message": "Order placed successfully with Cash on Delivery"
+            })
+        
+        elif payment_method == 'wallet':
+            # Wallet payment
+            wallet = Wallet.objects.get(user=current_user)
+            
+            if wallet.balance < order_total:
+                order.delete()
+                return JsonResponse({"error": "Insufficient wallet balance"}, status=400)
+            
+            # Deduct from wallet
+            wallet.balance -= order_total
+            wallet.save()
+            
+            # Create wallet transaction
+            WalletTransaction.objects.create(
+                wallet=wallet,
+                transaction_type='debit',
+                amount=order_total,
+                status='completed',
+                description=f'Payment for order {order.order_number}',
+                order=order
+            )
+            
+            order.payment_status = 'success'
+            order.status = 'confirmed'
+            order.save()
+            
+            # Clear cart
+            cart_items.delete()
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "payment_method": "wallet",
+                "wallet_balance": float(wallet.balance),
+                "message": "Order placed successfully using wallet"
+            })
+        
+        else:
+            # Cashfree payment
+            from .cashfree_utils import cashfree
+            
+            # Prepare customer details
+            customer_details = {
+                'customer_id': str(current_user.id),
+                'customer_name': current_user.name,
+                'customer_email': current_user.email,
+                'customer_phone': shipping_address.phone if shipping_address else '9999999999'
+            }
+            
+            # Get return URL from request or use default
+            return_url = data.get('return_url', 'http://localhost:3000/payment/success')
+            
+            # Create Cashfree order
+            cf_response = cashfree.create_order(
+                order_id=order.order_number,
+                amount=order_total,
+                customer_details=customer_details,
+                return_url=return_url
+            )
+            
+            if not cf_response.get('success'):
+                order.delete()
+                return JsonResponse({
+                    "error": "Failed to initialize payment",
+                    "message": cf_response.get('message')
+                }, status=400)
+            
+            # Create payment record
+            payment = Payment.objects.create(
+                order=order,
+                cashfree_order_id=cf_response.get('order_id'),
+                payment_method='cashfree',
+                amount=order_total,
+                status='initiated',
+                payment_session_id=cf_response.get('payment_session_id'),
+                transaction_data=cf_response.get('data', {})
+            )
+            
+            order.payment_status = 'initiated'
+            order.save()
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "payment_session_id": payment.payment_session_id,
+                "cashfree_order_id": payment.cashfree_order_id,
+                "amount": float(order_total),
+                "message": "Payment initialized successfully"
+            })
+            
+    except Cart.DoesNotExist:
+        return JsonResponse({"error": "Cart not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def retry_payment_order(request):
+    """Retry payment for an existing order"""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST method required"}, status=405)
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        user_id = payload.get('user_id')
+        current_user = AppUser.objects.get(pk=user_id)
+    except:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        order_id = data.get('order_id')
+        payment_method = data.get('payment_method', 'cashfree')
+        return_url = data.get('return_url', '')
+        
+        # Get the existing order
+        order = Order.objects.get(id=order_id, user=current_user)
+        
+        # Check if order is already paid
+        if order.payment_status == 'success':
+            return JsonResponse({"error": "Order already paid"}, status=400)
+        
+        # Get order total
+        order_total = order.total
+        
+        # Handle payment method
+        if payment_method == 'cod':
+            # Cash on Delivery
+            order.payment_status = 'cod'
+            order.status = 'confirmed'
+            order.save()
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "payment_method": "cod",
+                "message": "Order confirmed with Cash on Delivery"
+            })
+        
+        elif payment_method == 'wallet':
+            # Wallet payment
+            wallet = Wallet.objects.get(user=current_user)
+            
+            if wallet.balance < order_total:
+                return JsonResponse({"error": "Insufficient wallet balance"}, status=400)
+            
+            # Deduct from wallet
+            wallet.balance -= order_total
+            wallet.save()
+            
+            # Create or update payment record
+            payment, created = Payment.objects.get_or_create(
+                order=order,
+                defaults={
+                    'payment_method': 'wallet',
+                    'amount': order_total,
+                    'status': 'success'
+                }
+            )
+            
+            if not created:
+                payment.payment_method = 'wallet'
+                payment.status = 'success'
+                payment.amount = order_total
+                payment.save()
+            
+            order.payment_status = 'success'
+            order.status = 'confirmed'
+            order.save()
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "payment_method": "wallet",
+                "message": "Payment successful via wallet"
+            })
+        
+        elif payment_method == 'cashfree':
+            # Cashfree payment
+            from .cashfree_utils import CashfreePayment
+            
+            cf = CashfreePayment()
+            cf_response = cf.create_order(
+                order_id=order.order_number,
+                order_amount=float(order_total),
+                customer_details={
+                    "customer_id": str(current_user.id),
+                    "customer_email": current_user.email,
+                    "customer_phone": getattr(order.shipping_address, 'phone', '9999999999')
+                },
+                order_meta={
+                    "return_url": return_url,
+                    "notify_url": f"{request.scheme}://{request.get_host()}/api/payment/webhook/"
+                }
+            )
+            
+            if not cf_response.get('success'):
+                return JsonResponse({
+                    "error": "Failed to initialize payment",
+                    "message": cf_response.get('message')
+                }, status=400)
+            
+            # Create or update payment record
+            payment, created = Payment.objects.get_or_create(
+                order=order,
+                defaults={
+                    'cashfree_order_id': cf_response.get('order_id'),
+                    'payment_method': 'cashfree',
+                    'amount': order_total,
+                    'status': 'initiated',
+                    'payment_session_id': cf_response.get('payment_session_id'),
+                    'transaction_data': cf_response.get('data', {})
+                }
+            )
+            
+            if not created:
+                payment.cashfree_order_id = cf_response.get('order_id')
+                payment.payment_method = 'cashfree'
+                payment.status = 'initiated'
+                payment.payment_session_id = cf_response.get('payment_session_id')
+                payment.transaction_data = cf_response.get('data', {})
+                payment.save()
+            
+            order.payment_status = 'initiated'
+            order.save()
+            
+            return JsonResponse({
+                "success": True,
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "payment_session_id": payment.payment_session_id,
+                "cashfree_order_id": payment.cashfree_order_id,
+                "amount": float(order_total),
+                "message": "Payment initialized successfully"
+            })
+            
+    except Order.DoesNotExist:
+        return JsonResponse({"error": "Order not found"}, status=404)
+    except Wallet.DoesNotExist:
+        return JsonResponse({"error": "Wallet not found. Please contact support."}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def verify_payment(request):
+    """Verify Cashfree payment and update order status"""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST method required"}, status=405)
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        user_id = payload.get('user_id')
+        current_user = AppUser.objects.get(pk=user_id)
+    except:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        order_number = data.get('order_number')
+        
+        if not order_number:
+            return JsonResponse({"error": "Order number required"}, status=400)
+        
+        # Get order
+        order = Order.objects.get(order_number=order_number, user=current_user)
+        payment = Payment.objects.filter(order=order).first()
+        
+        if not payment:
+            return JsonResponse({"error": "Payment not found"}, status=404)
+        
+        # Verify with Cashfree
+        from .cashfree_utils import cashfree
+        
+        cf_response = cashfree.verify_payment(payment.cashfree_order_id)
+        
+        if cf_response.get('success'):
+            payment_status = cf_response.get('payment_status', '').upper()
+            
+            if payment_status == 'PAID':
+                # Update payment
+                payment.status = 'success'
+                payment.transaction_data = cf_response.get('data', {})
+                payment.save()
+                
+                # Update order
+                order.payment_status = 'success'
+                order.status = 'confirmed'
+                order.save()
+                
+                # Clear cart
+                try:
+                    cart = Cart.objects.get(user=current_user)
+                    CartItem.objects.filter(cart=cart).delete()
+                except:
+                    pass
+                
+                return JsonResponse({
+                    "success": True,
+                    "payment_status": "success",
+                    "order_id": order.id,
+                    "order_number": order.order_number,
+                    "message": "Payment verified successfully"
+                })
+            else:
+                # Payment failed or pending
+                payment.status = 'failed' if payment_status == 'FAILED' else 'pending'
+                payment.transaction_data = cf_response.get('data', {})
+                payment.save()
+                
+                order.payment_status = 'failed' if payment_status == 'FAILED' else 'pending'
+                order.save()
+                
+                return JsonResponse({
+                    "success": False,
+                    "payment_status": payment_status.lower(),
+                    "message": "Payment not completed"
+                })
+        else:
+            return JsonResponse({
+                "success": False,
+                "error": "Failed to verify payment",
+                "message": cf_response.get('message')
+            }, status=400)
+            
+    except Order.DoesNotExist:
+        return JsonResponse({"error": "Order not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def payment_webhook(request):
+    """Handle Cashfree payment webhook"""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST method required"}, status=405)
+    
+    try:
+        # Get webhook signature headers
+        timestamp = request.headers.get('x-webhook-timestamp', '')
+        signature = request.headers.get('x-webhook-signature', '')
+        
+        # Verify signature
+        from .cashfree_utils import cashfree
+        
+        raw_body = request.body.decode('utf-8')
+        
+        if not cashfree.verify_webhook_signature(timestamp, raw_body, signature):
+            return JsonResponse({"error": "Invalid signature"}, status=401)
+        
+        # Parse webhook data
+        data = json.loads(raw_body)
+        
+        event_type = data.get('type')
+        order_data = data.get('data', {}).get('order', {})
+        order_id = order_data.get('order_id')
+        
+        if not order_id:
+            return JsonResponse({"error": "Order ID not found"}, status=400)
+        
+        # Find payment by Cashfree order ID
+        payment = Payment.objects.filter(cashfree_order_id=order_id).first()
+        
+        if not payment:
+            return JsonResponse({"error": "Payment not found"}, status=404)
+        
+        order = payment.order
+        
+        # Handle different event types
+        if event_type == 'PAYMENT_SUCCESS_WEBHOOK':
+            payment.status = 'success'
+            payment.transaction_data = order_data
+            payment.save()
+            
+            order.payment_status = 'success'
+            order.status = 'confirmed'
+            order.save()
+            
+            # Clear cart
+            try:
+                cart = Cart.objects.get(user=order.user)
+                CartItem.objects.filter(cart=cart).delete()
+            except:
+                pass
+                
+        elif event_type == 'PAYMENT_FAILED_WEBHOOK':
+            payment.status = 'failed'
+            payment.transaction_data = order_data
+            payment.save()
+            
+            order.payment_status = 'failed'
+            order.save()
+        
+        return JsonResponse({"success": True})
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def get_user_orders(request):
+    """Get all orders for the current user"""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET method required"}, status=405)
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        user_id = payload.get('user_id')
+        current_user = AppUser.objects.get(pk=user_id)
+    except:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        orders = Order.objects.filter(user=current_user).order_by('-created_at')
+        
+        orders_data = []
+        for order in orders:
+            order_dict = order.to_dict()
+            
+            # Add payment info if exists
+            payment = Payment.objects.filter(order=order).first()
+            if payment:
+                order_dict['payment'] = payment.to_dict()
+            
+            orders_data.append(order_dict)
+        
+        return JsonResponse({
+            "success": True,
+            "orders": orders_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def get_order_detail(request, order_id):
+    """Get detailed information for a specific order"""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET method required"}, status=405)
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        user_id = payload.get('user_id')
+        current_user = AppUser.objects.get(pk=user_id)
+    except:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        order = Order.objects.get(id=order_id, user=current_user)
+        
+        order_dict = order.to_dict()
+        
+        # Add payment info
+        payment = Payment.objects.filter(order=order).first()
+        if payment:
+            order_dict['payment'] = payment.to_dict()
+        
+        return JsonResponse({
+            "success": True,
+            "order": order_dict
+        })
+        
+    except Order.DoesNotExist:
+        return JsonResponse({"error": "Order not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def get_friends_purchased(request, product_id):
+    """Get list of friends who purchased this product"""
+    if request.method != 'GET':
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    token = auth_header.split(' ')[1]
+    
+    try:
+        payload = decode_jwt(token)
+        user_id = payload.get('user_id')
+        current_user = AppUser.objects.get(pk=user_id)
+    except:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        product = Product.objects.get(pk=product_id)
+        
+        # Get all users that current user follows
+        following_ids = UserFollow.objects.filter(
+            follower=current_user
+        ).values_list('following_id', flat=True)
+        
+        # Get orders from following users that contain this product
+        friend_orders = OrderItem.objects.filter(
+            product=product,
+            order__user_id__in=following_ids,
+            order__status__in=['confirmed', 'processing', 'shipped', 'delivered']
+        ).select_related('order__user').distinct()
+        
+        # Get unique users who purchased
+        purchased_by = {}
+        for order_item in friend_orders:
+            user = order_item.order.user
+            if user.id not in purchased_by:
+                purchased_by[user.id] = {
+                    'id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                    'bio': user.bio,
+                    'purchased_date': order_item.order.created_at.isoformat()
+                }
+        
+        friends_list = list(purchased_by.values())
+        
+        return JsonResponse({
+            "success": True,
+            "count": len(friends_list),
+            "friends": friends_list
+        })
+        
+    except Product.DoesNotExist:
+        return JsonResponse({"error": "Product not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)

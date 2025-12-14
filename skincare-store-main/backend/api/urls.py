@@ -5,6 +5,7 @@ urlpatterns = [
     path('products/', views.list_products),
     path('products/create/', views.create_product),
     path('products/share/', views.share_product),  # MUST come before <str:product_id>
+    path('products/<str:product_id>/friends-purchased/', views.get_friends_purchased),
     path('products/<str:product_id>/', views.get_product),
     path('auth/register/', views.register),
     path('auth/login/', views.login),
@@ -106,4 +107,15 @@ urlpatterns = [
     path('wallet/add-money/', views.add_money_to_wallet),
     path('wallet/transactions/', views.get_wallet_transactions),
     path('wallet/pay-order/', views.create_order_with_wallet),
+    
+    # ========== PAYMENT & ORDERS ==========
+    # Payment
+    path('payment/create-order/', views.create_payment_order),
+    path('payment/retry-order/', views.retry_payment_order),
+    path('payment/verify/', views.verify_payment),
+    path('payment/webhook/', views.payment_webhook),
+    
+    # Orders
+    path('orders/my-orders/', views.get_user_orders),
+    path('orders/<int:order_id>/', views.get_order_detail),
 ]

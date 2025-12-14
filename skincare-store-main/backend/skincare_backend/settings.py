@@ -127,3 +127,15 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+
+# ========== CASHFREE PAYMENT GATEWAY ==========
+# Get from environment variables
+CASHFREE_APP_ID = os.getenv('CASHFREE_APP_ID', '')
+CASHFREE_SECRET_KEY = os.getenv('CASHFREE_SECRET_KEY', '')
+CASHFREE_ENV = os.getenv('CASHFREE_ENV', 'test')  # 'test' or 'production'
+
+# Determine base URL based on environment
+if CASHFREE_ENV == 'production':
+    CASHFREE_BASE_URL = 'https://api.cashfree.com/pg'
+else:
+    CASHFREE_BASE_URL = 'https://sandbox.cashfree.com/pg'
