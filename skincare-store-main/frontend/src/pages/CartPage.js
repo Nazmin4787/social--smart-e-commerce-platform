@@ -316,7 +316,11 @@ const CartPage = () => {
                         }}>
                           <div className="alternative-product-image">
                             {alt.images && alt.images.length > 0 ? (
-                              <img src={alt.images[0]} alt={alt.title} />
+                              <img 
+                                src={getImageUrl(alt.images[0])} 
+                                alt={alt.title}
+                                onError={(e) => { e.target.src = '/placeholder.png'; }}
+                              />
                             ) : (
                               <i className="fas fa-image"></i>
                             )}

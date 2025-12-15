@@ -212,13 +212,24 @@ const OrderDetailPage = () => {
           <div className="detail-section">
             <h2>Items ({order.items?.length || 0})</h2>
             <div className="order-items-list">
-              {order.items && order.items.map((item, idx) => (
+              {order.items && order.items.map((item, idx) => {
+                const imageUrl = item.product?.images && item.product.images.length > 0 
+                  ? (item.product.images[0].startsWith('http') 
+                      ? item.product.images[0] 
+                      : `http://localhost:8000${item.product.images[0]}`)
+                  : '/placeholder.png';
+                
+                return (
                 <div key={idx} className="order-item-detail">
                   {item.product && (
                     <>
                       <img 
-                        src={item.product.images?.[0] || '/placeholder.png'} 
-                        alt={item.product.title} 
+                        src={imageUrl}
+                        alt={item.product.title}
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = '/placeholder.png';
+                        }}
                       />
                       <div className="item-info">
                         <h3>{item.product.title}</h3>
@@ -231,7 +242,8 @@ const OrderDetailPage = () => {
                     </>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

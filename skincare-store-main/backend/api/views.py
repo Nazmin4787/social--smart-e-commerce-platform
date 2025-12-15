@@ -1,6 +1,7 @@
 import json
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
+from django.http.multipartparser import MultiPartParser
 from rest_framework.decorators import api_view
 from django.db import models
 from .utils import create_jwt, create_refresh_token, decode_jwt
@@ -98,6 +99,23 @@ def create_product(request):
                 image_url = f"{settings.MEDIA_URL}{saved_path}"
                 images.append(image_url)
         
+        # Parse dates
+        from datetime import datetime
+        expiry_date = None
+        manufacturing_date = None
+        expiry_str = request.POST.get("expiry_date", "")
+        mfg_str = request.POST.get("manufacturing_date", "")
+        if expiry_str:
+            try:
+                expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        if mfg_str:
+            try:
+                manufacturing_date = datetime.strptime(mfg_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        
         p = Product.objects.create(
             title=title,
             description=description,
@@ -110,6 +128,8 @@ def create_product(request):
             benefits=[b.strip() for b in request.POST.get("benefits", "").split('\n') if b.strip()],
             how_to_use=[h.strip() for h in request.POST.get("how_to_use", "").split('\n') if h.strip()],
             faqs=json.loads(request.POST.get("faqs", "[]")),
+            expiry_date=expiry_date,
+            manufacturing_date=manufacturing_date,
         )
         return JsonResponse({"id": p.id, "message": "Product created successfully"}, status=201)
     else:
@@ -1192,55 +1212,98 @@ def admin_bulk_update_stock(request):
 @csrf_exempt
 def admin_product_update(request, product_id):
     """Admin endpoint to update a product. Supports both JSON and multipart/form-data."""
+    print(f"[admin_product_update] Called with method={request.method}, product_id={product_id}")
     if request.method not in ('PUT', 'POST'):
         return HttpResponseBadRequest()
 
     user, err = _require_admin(request)
     if err:
+        print(f"[admin_product_update] Auth error: {err}")
         return err
 
     try:
         product = Product.objects.get(pk=product_id)
     except Product.DoesNotExist:
+        print(f"[admin_product_update] Product {product_id} not found")
         return JsonResponse({'error': 'Product not found'}, status=404)
 
+    print(f"[admin_product_update] Content-Type: {request.content_type}")
+    
     # Check if request has multipart/form-data content type
     if request.content_type and 'multipart/form-data' in request.content_type:
+        # Django doesn't parse multipart for PUT by default, so we do it manually
+        if request.method == 'PUT':
+            parser = MultiPartParser(request.META, request, request.upload_handlers)
+            post_data, files = parser.parse()
+        else:
+            post_data = request.POST
+            files = request.FILES
+        
+        print(f"[admin_product_update] post_data keys: {list(post_data.keys())}")
+        print(f"[admin_product_update] post_data: {dict(post_data)}")
+        
         # Handle multipart form data (with or without file uploads)
-        title = request.POST.get("title")
-        description = request.POST.get("description")
-        price = request.POST.get("price")
-        stock = request.POST.get("stock")
-        category = request.POST.get("category")
-        is_trending = request.POST.get("is_trending")
+        title = post_data.get("title")
+        description = post_data.get("description")
+        price = post_data.get("price")
+        stock = post_data.get("stock")
+        category = post_data.get("category")
+        is_trending = post_data.get("is_trending")
+        
+        print(f"[admin_product_update] Received: title={title}, price={price}, stock={stock}, category={category}")
         
         if title:
             product.title = sanitize_string(title, max_length=255)
         if description is not None:
             product.description = sanitize_string(description, max_length=5000)
         if price:
-            product.price = float(price)
-        if stock is not None:
-            product.stock = int(stock)
+            try:
+                product.price = float(price)
+            except (ValueError, TypeError):
+                pass
+        if stock is not None and stock != '':
+            try:
+                product.stock = int(stock)
+            except (ValueError, TypeError):
+                pass
         if category:
             product.category = sanitize_string(category, max_length=100)
         
         # Handle is_trending - always update based on what's sent
         # Checkbox sends "true" when checked, FormData doesn't include it when unchecked
-        product.is_trending = request.POST.get("is_trending") == "true"
+        product.is_trending = post_data.get("is_trending") == "true"
+        
+        # Handle expiry and manufacturing dates
+        from datetime import datetime
+        expiry_str = post_data.get("expiry_date", "")
+        mfg_str = post_data.get("manufacturing_date", "")
+        if expiry_str:
+            try:
+                product.expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        elif expiry_str == '':
+            product.expiry_date = None
+        if mfg_str:
+            try:
+                product.manufacturing_date = datetime.strptime(mfg_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        elif mfg_str == '':
+            product.manufacturing_date = None
         
         # Handle ingredients, benefits, and how_to_use - always update
-        ingredients = request.POST.get("ingredients", "")
+        ingredients = post_data.get("ingredients", "")
         product.ingredients = [i.strip() for i in ingredients.split('\n') if i.strip()] if ingredients else []
         
-        benefits = request.POST.get("benefits", "")
+        benefits = post_data.get("benefits", "")
         product.benefits = [b.strip() for b in benefits.split('\n') if b.strip()] if benefits else []
         
-        how_to_use = request.POST.get("how_to_use", "")
+        how_to_use = post_data.get("how_to_use", "")
         product.how_to_use = [h.strip() for h in how_to_use.split('\n') if h.strip()] if how_to_use else []
         
         # Handle new image uploads
-        uploaded_files = request.FILES.getlist('images')
+        uploaded_files = files.getlist('images') if hasattr(files, 'getlist') else []
         if uploaded_files:
             import os
             from django.conf import settings
@@ -1270,6 +1333,7 @@ def admin_product_update(request, product_id):
             product.images = new_images
         
         product.save()
+        print(f"[admin_product_update] Product {product.id} saved successfully. New values: title={product.title}, price={product.price}, stock={product.stock}")
         return JsonResponse({'id': product.id, 'message': 'Product updated successfully'})
     else:
         # Handle JSON data

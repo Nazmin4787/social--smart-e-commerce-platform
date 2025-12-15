@@ -116,36 +116,12 @@ const Header = () => {
         <div className="header-container">
           {/* Logo */}
           <div className="brand-logo" onClick={() => navigate('/')}>
-            <div className="logo-icon">
-              <svg viewBox="0 0 50 50" className="logo-svg">
-                <defs>
-                  <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style={{stopColor: '#10B981', stopOpacity: 1}} />
-                    <stop offset="50%" style={{stopColor: '#059669', stopOpacity: 1}} />
-                    <stop offset="100%" style={{stopColor: '#047857', stopOpacity: 1}} />
-                  </linearGradient>
-                  <linearGradient id="petalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style={{stopColor: '#34D399', stopOpacity: 0.9}} />
-                    <stop offset="100%" style={{stopColor: '#10B981', stopOpacity: 0.9}} />
-                  </linearGradient>
-                </defs>
-                {/* Lotus petals */}
-                <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#petalGradient)" transform="rotate(-30 25 25)" />
-                <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#petalGradient)" transform="rotate(30 25 25)" />
-                <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#petalGradient)" transform="rotate(90 25 25)" />
-                <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#logoGradient)" transform="rotate(-90 25 25)" />
-                <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#logoGradient)" transform="rotate(150 25 25)" />
-                <ellipse cx="25" cy="20" rx="5" ry="10" fill="url(#logoGradient)" transform="rotate(210 25 25)" />
-                {/* Center circle */}
-                <circle cx="25" cy="25" r="7" fill="url(#logoGradient)" />
-                <circle cx="25" cy="25" r="4" fill="#FCD34D" opacity="0.8" />
-                {/* Sparkle accents */}
-                <circle cx="15" cy="15" r="1.5" fill="#FCD34D" opacity="0.9" />
-                <circle cx="35" cy="15" r="1.5" fill="#FCD34D" opacity="0.9" />
-                <circle cx="25" cy="10" r="1" fill="white" opacity="0.8" />
-              </svg>
-            </div>
-            <span className="logo-text">NOVACELL</span>
+            <div className="logo-text-serif">NOVACELL</div>
+            <svg className="leaf-accent" viewBox="0 0 30 30" width="30" height="30">
+              <path d="M15 3 Q20 8, 25 15 Q20 22, 15 27 Q10 22, 5 15 Q10 8, 15 3 Z" 
+                    fill="#059669" opacity="0.8" />
+              <path d="M15 10 L15 24" stroke="#047857" strokeWidth="1" opacity="0.5" />
+            </svg>
           </div>
 
           {/* Search Bar */}

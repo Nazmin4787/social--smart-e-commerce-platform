@@ -154,7 +154,17 @@ const CheckoutPage = () => {
               <div className="cart-summary">
                 {cartItems.map(item => (
                   <div key={item.id} className="cart-item-summary">
-                    <img src={item.product.images[0]} alt={item.product.title} />
+                    <img 
+                      src={
+                        item.product.images && item.product.images.length > 0
+                          ? (item.product.images[0].startsWith('http') 
+                              ? item.product.images[0] 
+                              : `http://localhost:8000${item.product.images[0]}`)
+                          : '/placeholder.png'
+                      }
+                      alt={item.product.title}
+                      onError={(e) => { e.target.src = '/placeholder.png'; }}
+                    />
                     <div className="item-details">
                       <h3>{item.product.title}</h3>
                       <p>Qty: {item.qty}</p>

@@ -14,6 +14,12 @@ const ingredients = [
     placeholder: '💧'
   },
   { 
+    name: 'Niacinamide', 
+    value: 'NIACINAMIDE',
+    image: '/images/ingredients/niacinamide.jpeg',
+    placeholder: '✨'
+  },
+  { 
     name: 'Watermelon', 
     value: 'WATERMELON',
     image: '/images/ingredients/watermelon.jpeg',

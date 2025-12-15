@@ -487,10 +487,17 @@ const MessagesPage = () => {
                                   <div className="shared-product-card">
                                     <div className="product-image-container">
                                       <img 
-                                        src={message.shared_product.images?.[0] || '/placeholder.png'} 
+                                        src={
+                                          message.shared_product.images && message.shared_product.images.length > 0
+                                            ? (message.shared_product.images[0].startsWith('http') 
+                                                ? message.shared_product.images[0] 
+                                                : `http://localhost:8000${message.shared_product.images[0]}`)
+                                            : '/placeholder.png'
+                                        }
                                         alt={message.shared_product.title}
                                         className="shared-product-image"
                                         onClick={() => navigate(`/products/${message.shared_product.id}`)}
+                                        onError={(e) => { e.target.src = '/placeholder.png'; }}
                                       />
                                       <div className="product-action-icons">
                                         <button 

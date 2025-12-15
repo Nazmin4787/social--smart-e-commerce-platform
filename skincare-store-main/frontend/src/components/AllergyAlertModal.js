@@ -7,6 +7,16 @@ const AllergyAlertModal = ({ allergyData, onClose, onAddAnyway }) => {
 
   if (!has_allergens) return null;
 
+  // Helper to get full image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath;
+    if (imagePath.startsWith('/media/')) {
+      return `http://localhost:8000${imagePath}`;
+    }
+    return `http://localhost:8000/media/${imagePath}`;
+  };
+
   const handleViewAlternative = (altProductId) => {
     onClose();
     navigate(`/product/${altProductId}`);
@@ -59,7 +69,11 @@ const AllergyAlertModal = ({ allergyData, onClose, onAddAnyway }) => {
                   <div key={alt.id} className="alternative-card">
                     <div className="alternative-image">
                       {alt.images && alt.images.length > 0 ? (
-                        <img src={alt.images[0]} alt={alt.title} />
+                        <img 
+                          src={getImageUrl(alt.images[0])} 
+                          alt={alt.title}
+                          onError={(e) => { e.target.src = '/placeholder.png'; }}
+                        />
                       ) : (
                         <div className="no-image">
                           <i className="fas fa-image"></i>

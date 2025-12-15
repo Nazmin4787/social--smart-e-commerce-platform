@@ -53,7 +53,9 @@ const AdminDashboard = () => {
     ingredients: [],
     benefits: [],
     how_to_use: [],
-    faqs: []
+    faqs: [],
+    expiry_date: '',
+    manufacturing_date: ''
   });
   
   // Banners management
@@ -191,16 +193,34 @@ const AdminDashboard = () => {
       const token = localStorage.getItem('accessToken');
       const formData = new FormData();
       formData.append('title', productForm.title);
-      formData.append('description', productForm.description);
-      formData.append('price', parseFloat(productForm.price));
-      formData.append('stock', parseInt(productForm.stock));
+      formData.append('description', productForm.description || '');
+      formData.append('price', parseFloat(productForm.price) || 0);
+      formData.append('stock', parseInt(productForm.stock, 10) || 0);
       formData.append('category', productForm.category);
       formData.append('is_trending', productForm.is_trending ? 'true' : 'false');
+      
+      // Debug log
+      console.log('Submitting product:', {
+        title: productForm.title,
+        price: parseFloat(productForm.price) || 0,
+        stock: parseInt(productForm.stock, 10) || 0,
+        category: productForm.category,
+        is_trending: productForm.is_trending,
+        editingProduct: editingProduct?.id
+      });
       
       // Append ingredients, benefits, and how_to_use
       formData.append('ingredients', (productForm.ingredients || []).join('\n'));
       formData.append('benefits', (productForm.benefits || []).join('\n'));
       formData.append('how_to_use', (productForm.how_to_use || []).join('\n'));
+      
+      // Append expiry and manufacturing dates
+      if (productForm.expiry_date) {
+        formData.append('expiry_date', productForm.expiry_date);
+      }
+      if (productForm.manufacturing_date) {
+        formData.append('manufacturing_date', productForm.manufacturing_date);
+      }
       
       // Append image files (only new uploads, not existing URLs)
       if (productForm.images && productForm.images.length > 0) {
@@ -229,7 +249,13 @@ const AdminDashboard = () => {
         stock: '',
         category: '',
         is_trending: false,
-        images: []
+        images: [],
+        ingredients: [],
+        benefits: [],
+        how_to_use: [],
+        faqs: [],
+        expiry_date: '',
+        manufacturing_date: ''
       });
       fetchProducts();
     } catch (error) {
@@ -241,17 +267,19 @@ const AdminDashboard = () => {
   const handleEditProduct = (product) => {
     setEditingProduct(product);
     setProductForm({
-      title: product.title,
+      title: product.title || '',
       description: product.description || '',
-      price: product.price.toString(),
-      stock: product.stock.toString(),
+      price: (product.price ?? '').toString(),
+      stock: (product.stock ?? '').toString(),
       category: product.category || '',
       is_trending: product.is_trending || false,
       images: product.images || [],
       ingredients: product.ingredients || [],
       benefits: product.benefits || [],
       how_to_use: product.how_to_use || [],
-      faqs: product.faqs || []
+      faqs: product.faqs || [],
+      expiry_date: product.expiry_date || '',
+      manufacturing_date: product.manufacturing_date || ''
     });
     setShowProductForm(true);
   };
@@ -279,7 +307,14 @@ const AdminDashboard = () => {
       price: '',
       stock: '',
       category: '',
-      images: []
+      is_trending: false,
+      images: [],
+      ingredients: [],
+      benefits: [],
+      how_to_use: [],
+      faqs: [],
+      expiry_date: '',
+      manufacturing_date: ''
     });
   };
 
@@ -684,6 +719,30 @@ const AdminDashboard = () => {
                       </select>
                     </div>
 
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Manufacturing Date</label>
+                        <input
+                          type="date"
+                          name="manufacturing_date"
+                          value={productForm.manufacturing_date}
+                          onChange={handleProductFormChange}
+                          className="form-control"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Expiry Date</label>
+                        <input
+                          type="date"
+                          name="expiry_date"
+                          value={productForm.expiry_date}
+                          onChange={handleProductFormChange}
+                          className="form-control"
+                        />
+                      </div>
+                    </div>
+
                     <div className="form-group">
                       <label className="checkbox-label">
                         <input
@@ -702,8 +761,9 @@ const AdminDashboard = () => {
                         className="form-control"
                         onChange={(e) => {
                           const value = e.target.value;
-                          if (value && !productForm.ingredients.includes(value)) {
-                            setProductForm({...productForm, ingredients: [...productForm.ingredients, value]});
+                          const currentIngredients = productForm.ingredients || [];
+                          if (value && !currentIngredients.includes(value)) {
+                            setProductForm({...productForm, ingredients: [...currentIngredients, value]});
                           }
                           e.target.value = '';
                         }}

@@ -232,8 +232,9 @@ export async function updateOrderStatus(token, orderId, status) {
   return axios.patch(`${API_BASE}/admin/orders/${orderId}/status/`, { status }, getAuthHeaders(token)).then(r => r.data);
 }
 
-export async function getAllProducts(token) {
-  return axios.get(`${API_BASE}/admin/products/list/`, getAuthHeaders(token)).then(r => {
+export async function getAllProducts(token, page = 1, page_size = 100) {
+  return axios.get(`${API_BASE}/admin/products/list/?page=${page}&page_size=${page_size}`, getAuthHeaders(token)).then(r => {
+    // r.data contains: { total, page, page_size, results }
     console.log('API Response:', r.data);
     console.log('Results field:', r.data.results);
     console.log('Results length:', r.data.results?.length);
@@ -272,23 +273,28 @@ export async function deleteBanner(token, bannerId) {
 
 // Admin Product Management
 export async function createProduct(token, productData) {
+  // Don't set Content-Type manually - let axios set it for FormData (includes boundary)
   return axios.post(`${API_BASE}/products/create/`, productData, {
-    ...getAuthHeaders(token),
     headers: {
-      ...getAuthHeaders(token).headers,
-      'Content-Type': 'multipart/form-data'
+      'Authorization': `Bearer ${token}`
     }
   }).then(r => r.data);
 }
 
 export async function updateProduct(token, productId, productData) {
+  console.log('updateProduct called with productId:', productId);
+  // Don't set Content-Type manually - let axios set it for FormData (includes boundary)
   return axios.put(`${API_BASE}/admin/products/${productId}/update/`, productData, {
-    ...getAuthHeaders(token),
     headers: {
-      ...getAuthHeaders(token).headers,
-      'Content-Type': 'multipart/form-data'
+      'Authorization': `Bearer ${token}`
     }
-  }).then(r => r.data);
+  }).then(r => {
+    console.log('updateProduct response:', r.data);
+    return r.data;
+  }).catch(err => {
+    console.error('updateProduct error:', err.response?.data || err.message);
+    throw err;
+  });
 }
 
 export async function deleteProduct(token, productId) {

@@ -109,9 +109,19 @@ function ShareProductModal({ isOpen, onClose, product }) {
 
         <div className="share-product-info">
           <img 
-            src={product.images?.[0] || '/placeholder.png'} 
+            src={
+              product.images && product.images.length > 0
+                ? (product.images[0].startsWith('http') 
+                    ? product.images[0] 
+                    : `http://localhost:8000${product.images[0]}`)
+                : '/placeholder.png'
+            }
             alt={product.title}
             className="share-product-image"
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = '/placeholder.png';
+            }}
           />
           <div className="share-product-details">
             <h3>{product.title}</h3>
