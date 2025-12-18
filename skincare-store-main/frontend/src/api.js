@@ -141,6 +141,15 @@ export async function createOrder(token, items, total) {
   ).then(r => r.data);
 }
 
+// Quick Buy (Book Now) - Creates order directly from product
+export async function quickBuy(token, productId, qty = 1) {
+  return axios.post(
+    `${API_BASE}/payment/quick-buy/`,
+    { product_id: productId, qty },
+    getAuthHeaders(token)
+  ).then(r => r.data);
+}
+
 // Bookings
 export async function createBooking(token, productId, { qty = 1, delivery_date = null, notes = '', payment_status = 'pending' } = {}) {
   return axios.post(

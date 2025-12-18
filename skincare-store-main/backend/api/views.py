@@ -2067,7 +2067,7 @@ def get_mutual_followers(request, user_id):
 
 @csrf_exempt
 def get_notifications(request):
-    """Get user's notifications."""
+    """Get user's notifications including unread messages."""
     if request.method != 'GET':
         return HttpResponseBadRequest()
     
@@ -2082,6 +2082,9 @@ def get_notifications(request):
     except Exception:
         return JsonResponse({"error": "Invalid token"}, status=401)
     
+    from django.db.models import Q
+    from api.models import Conversation, Message
+    
     # Filter by read status if specified
     is_read = request.GET.get('is_read')
     notifications_query = Notification.objects.filter(user=current_user)
@@ -2090,18 +2093,56 @@ def get_notifications(request):
         is_read_bool = is_read.lower() == 'true'
         notifications_query = notifications_query.filter(is_read=is_read_bool)
     
+    # Get regular notifications
+    notifications_data = [notif.to_dict() for notif in notifications_query.select_related('actor')]
+    
+    # Get unread messages as notifications
+    conversations = Conversation.objects.filter(
+        Q(user1=current_user) | Q(user2=current_user)
+    )
+    
+    # Build message notification filter
+    message_filter = Q(conversation__in=conversations) & ~Q(sender=current_user)
+    if is_read is not None:
+        is_read_bool = is_read.lower() == 'true'
+        message_filter &= Q(is_read=is_read_bool)
+    else:
+        # By default, only show unread messages as notifications
+        message_filter &= Q(is_read=False)
+    
+    unread_messages = Message.objects.filter(message_filter).select_related('sender', 'conversation').order_by('-created_at')
+    
+    # Convert unread messages to notification format
+    for msg in unread_messages:
+        msg_content = msg.content[:50] + '...' if len(msg.content) > 50 else msg.content
+        notifications_data.append({
+            'id': f'msg_{msg.id}',
+            'actor': {
+                'id': msg.sender.id,
+                'name': msg.sender.name,
+                'email': msg.sender.email,
+                'bio': msg.sender.bio or '',
+            },
+            'notification_type': 'message',
+            'message': f'sent you a message: "{msg_content}"',
+            'is_read': msg.is_read,
+            'created_at': msg.created_at.isoformat(),
+            'conversation_id': msg.conversation.id,
+        })
+    
+    # Sort all notifications by created_at descending
+    notifications_data.sort(key=lambda x: x['created_at'], reverse=True)
+    
     # Pagination
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 20))
     offset = (page - 1) * page_size
+    total_count = len(notifications_data)
     
-    notifications = notifications_query.select_related('actor')[offset:offset + page_size]
-    total_count = notifications_query.count()
-    
-    notifications_data = [notif.to_dict() for notif in notifications]
+    paginated_notifications = notifications_data[offset:offset + page_size]
     
     return JsonResponse({
-        "notifications": notifications_data,
+        "notifications": paginated_notifications,
         "total_count": total_count,
         "page": page,
         "page_size": page_size,
@@ -2170,7 +2211,7 @@ def mark_all_notifications_read(request):
 
 @csrf_exempt
 def get_unread_notifications_count(request):
-    """Get count of unread notifications."""
+    """Get count of unread notifications including unread messages."""
     if request.method != 'GET':
         return HttpResponseBadRequest()
     
@@ -2185,7 +2226,22 @@ def get_unread_notifications_count(request):
     except Exception:
         return JsonResponse({"error": "Invalid token"}, status=401)
     
-    unread_count = Notification.objects.filter(user=current_user, is_read=False).count()
+    from django.db.models import Q
+    from api.models import Conversation, Message
+    
+    # Count regular unread notifications
+    notification_count = Notification.objects.filter(user=current_user, is_read=False).count()
+    
+    # Count unread messages
+    conversations = Conversation.objects.filter(
+        Q(user1=current_user) | Q(user2=current_user)
+    )
+    message_count = Message.objects.filter(
+        conversation__in=conversations,
+        is_read=False
+    ).exclude(sender=current_user).count()
+    
+    unread_count = notification_count + message_count
     
     return JsonResponse({"unread_count": unread_count})
 
@@ -3116,6 +3172,72 @@ def create_order_with_wallet(request):
                 "message": "Order created successfully"
             })
             
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+# ==================== QUICK BUY (BOOK NOW) ENDPOINT ====================
+
+@csrf_exempt
+def quick_buy(request):
+    """Quick buy - create order directly from product (Book Now button)"""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST method required"}, status=405)
+    
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if not token:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    try:
+        payload = decode_jwt(token)
+        user_id = payload.get('user_id')
+        current_user = AppUser.objects.get(pk=user_id)
+    except:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        product_id = data.get('product_id')
+        qty = data.get('qty', 1)
+        
+        if not product_id:
+            return JsonResponse({"error": "Product ID is required"}, status=400)
+        
+        # Get product
+        product = Product.objects.get(pk=product_id)
+        
+        if product.stock < qty:
+            return JsonResponse({"error": "Insufficient stock"}, status=400)
+        
+        # Calculate total
+        order_total = product.price * qty
+        
+        # Create order directly (without cart)
+        order = Order.objects.create(
+            user=current_user,
+            total=order_total,
+            status='pending',
+            payment_status='pending'
+        )
+        
+        # Create order item
+        OrderItem.objects.create(
+            order=order,
+            product=product,
+            qty=qty,
+            price=product.price
+        )
+        
+        return JsonResponse({
+            "success": True,
+            "order_id": order.id,
+            "order_number": order.order_number,
+            "total": float(order_total),
+            "message": "Order created successfully"
+        })
+        
+    except Product.DoesNotExist:
+        return JsonResponse({"error": "Product not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 

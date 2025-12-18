@@ -114,6 +114,7 @@ urlpatterns = [
     path('payment/retry-order/', views.retry_payment_order),
     path('payment/verify/', views.verify_payment),
     path('payment/webhook/', views.payment_webhook),
+    path('payment/quick-buy/', views.quick_buy),
     
     # Orders
     path('orders/my-orders/', views.get_user_orders),

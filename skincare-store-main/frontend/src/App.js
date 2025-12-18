@@ -20,7 +20,10 @@ import NotificationsPage from './pages/NotificationsPage';
 import SocialPage from './pages/SocialPage';
 import MessagesPage from './pages/MessagesPage';
 import WalletPage from './pages/WalletPage';
+import CartReminderPopup from './components/CartReminderPopup';
 import './styles.css';
+
+import ProductSearchPage from './pages/ProductSearchPage';
 
 function App() {
   return (
@@ -48,7 +51,9 @@ function App() {
             <Route path="/users/:userId/following" element={<FollowingPage />} />
             <Route path="/search/users" element={<UserSearchPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/search/products" element={<ProductSearchPage />} />
           </Routes>
+          <CartReminderPopup />
         </Router>
       </CartProvider>
     </AuthProvider>

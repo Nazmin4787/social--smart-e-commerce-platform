@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies, likeProduct, getLikedProducts, getFriendsProductActivities, getFriendsPurchased } from '../api';
+import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies, likeProduct, getLikedProducts, getFriendsProductActivities, getFriendsPurchased, quickBuy } from '../api';
 import ShareButton from '../components/ShareButton';
 import AllergyAlertModal from '../components/AllergyAlertModal';
 import ProductCard from '../components/ProductCard';
@@ -150,8 +150,22 @@ const ProductDetailPage = () => {
     }
   };
 
-  const handleBookNow = () => {
-    window.location.href = `/book/${product.id}`;
+  const handleBookNow = async () => {
+    if (!user) {
+      alert('Please login to proceed');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await quickBuy(token, product.id, 1);
+      if (response.success && response.order_id) {
+        navigate(`/payment/${response.order_id}`);
+      } else {
+        alert(response.error || 'Failed to create order');
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to create order');
+    }
   };
 
   const submitReview = async () => {

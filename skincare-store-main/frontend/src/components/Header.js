@@ -2,6 +2,7 @@ import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { login as apiLogin, register as apiRegister, fetchProducts, addToCart } from '../api';
+import { getUnreadMessagesCount } from '../api/chatApi';
 import AuthModal from './AuthModal';
 import { CartContext } from '../context/CartContext';
 import NotificationBell from './NotificationBell';
@@ -38,12 +39,36 @@ const Header = () => {
     }, 300);
   };
   
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+
   useEffect(() => {
     if (user) fetchCart();
   }, [user]);
+  
   useEffect(() => {
     setCartCount(items ? items.length : 0);
   }, [items]);
+
+  // Fetch unread messages count
+  useEffect(() => {
+    if (!user || user.is_staff || user.is_superuser) return;
+    
+    const fetchUnreadMessages = async () => {
+      try {
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+          const data = await getUnreadMessagesCount(token);
+          setUnreadMessagesCount(data.unread_count || 0);
+        }
+      } catch (err) {
+        console.error('Error fetching unread messages:', err);
+      }
+    };
+    
+    fetchUnreadMessages();
+    const interval = setInterval(fetchUnreadMessages, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Developer/demo login helper - creates or logs in a demo user
   const demoLogin = async () => {
@@ -96,8 +121,7 @@ const Header = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      // Navigate to products search page
-      console.log('Search:', searchQuery);
+      navigate(`/search/products?q=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
 
@@ -151,6 +175,7 @@ const Header = () => {
             {user && !user.is_staff && !user.is_superuser && (
               <button className="header-icon-btn" onClick={() => navigate('/messages')} title="Messages">
                 <i className="fas fa-comment-dots"></i>
+                {unreadMessagesCount > 0 && <span className="icon-badge">{unreadMessagesCount}</span>}
               </button>
             )}
 

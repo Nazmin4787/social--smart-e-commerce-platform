@@ -1,14 +1,27 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { CartContext } from '../context/CartContext';
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api/socialApi';
 
 const NotificationsPage = () => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
+  const { items, total } = useContext(CartContext);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all', 'unread'
+  const [cartReminderDismissed, setCartReminderDismissed] = useState(false);
+
+  // Calculate total items in cart
+  const totalItems = items.reduce((sum, item) => sum + (item.qty || 1), 0);
+
+  // Helper function to get full image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return '/images/placeholder.png';
+    if (imagePath.startsWith('http')) return imagePath;
+    return `http://localhost:8000${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+  };
 
   useEffect(() => {
     fetchNotifications();
@@ -30,6 +43,16 @@ const NotificationsPage = () => {
   };
 
   const handleMarkAsRead = async (notificationId) => {
+    // Skip API call for message notifications (they're marked read in chat)
+    if (String(notificationId).startsWith('msg_')) {
+      setNotifications(prev =>
+        prev.map(notif =>
+          notif.id === notificationId ? { ...notif, is_read: true } : notif
+        )
+      );
+      return;
+    }
+    
     const token = localStorage.getItem('access_token');
 
     try {
@@ -85,7 +108,13 @@ const NotificationsPage = () => {
     if (!notification.is_read) {
       handleMarkAsRead(notification.id);
     }
-    navigate(`/users/${notification.actor.id}/profile`);
+    
+    // Navigate based on notification type
+    if (notification.notification_type === 'message') {
+      navigate('/messages');
+    } else {
+      navigate(`/users/${notification.actor.id}/profile`);
+    }
   };
 
   const getTimeAgo = (dateString) => {
@@ -126,6 +155,53 @@ const NotificationsPage = () => {
         </div>
       )}
 
+      {/* Cart Reminder Notification */}
+      {!loading && totalItems > 0 && !cartReminderDismissed && (
+        <div className="cart-reminder-notification" onClick={() => navigate('/cart')}>
+          <div className="cart-reminder-notification-icon">
+            <i className="fas fa-shopping-cart"></i>
+            <span className="cart-reminder-notification-badge">{totalItems}</span>
+          </div>
+          <div className="cart-reminder-notification-content">
+            <div className="cart-reminder-notification-header">
+              <strong>Don't forget your cart!</strong>
+              <button 
+                className="cart-reminder-dismiss-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCartReminderDismissed(true);
+                }}
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <p className="cart-reminder-notification-text">
+              You have {totalItems} item{totalItems > 1 ? 's' : ''} worth <strong>₹{total.toFixed(2)}</strong> waiting
+            </p>
+            <div className="cart-reminder-notification-items">
+              {items.slice(0, 3).map((item, index) => (
+                <img 
+                  key={index}
+                  src={getImageUrl(item.images?.[0])}
+                  alt={item.title}
+                  className="cart-reminder-notification-item-img"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ))}
+              {items.length > 3 && (
+                <span className="cart-reminder-notification-more">+{items.length - 3}</span>
+              )}
+            </div>
+          </div>
+          <div className="cart-reminder-notification-action">
+            <i className="fas fa-chevron-right"></i>
+          </div>
+        </div>
+      )}
+
       {!loading && notifications.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <i className="fas fa-bell-slash" style={{ fontSize: '48px', color: '#ccc' }}></i>
@@ -144,7 +220,7 @@ const NotificationsPage = () => {
               onClick={() => handleNotificationClick(notification)}
             >
               <div className="notification-avatar">
-                <i className="fas fa-user-circle"></i>
+                <i className={`fas ${notification.notification_type === 'message' ? 'fa-comment-dots' : 'fa-user-circle'}`}></i>
               </div>
               <div className="notification-content">
                 <p>

@@ -30,6 +30,13 @@ const ProductCard = ({ product, onLike, onAddToCart, isLiked, friendsActivities,
   return (
     <div className="product-card">
       <div className="product-image-container">
+        {/* Blurred background image */}
+        {productImage && (
+          <div 
+            className="product-img-blur-bg"
+            style={{ backgroundImage: `url(${productImage})` }}
+          />
+        )}
         {productImage ? (
           <img 
             src={productImage} 
