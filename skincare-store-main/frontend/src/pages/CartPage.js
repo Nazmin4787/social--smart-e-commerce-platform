@@ -94,8 +94,7 @@ const CartPage = () => {
         // Refresh cart to clear items
         if (refreshCart) await refreshCart();
         
-        // Show success and navigate to orders
-        alert('Order placed successfully! 🎉');
+        // Navigate to orders (no blocking alert)
         navigate('/orders');
       } else {
         alert(data.error || 'Failed to create order. Please try again.');

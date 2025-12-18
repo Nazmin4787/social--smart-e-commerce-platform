@@ -18,7 +18,7 @@ const CheckoutPage = () => {
 
   useEffect(() => {
     if (!user) {
-      navigate('/login');
+      navigate('/');
       return;
     }
     fetchCheckoutData();

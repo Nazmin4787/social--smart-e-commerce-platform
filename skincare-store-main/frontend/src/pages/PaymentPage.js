@@ -19,7 +19,7 @@ const PaymentPage = () => {
 
   useEffect(() => {
     if (!user) {
-      navigate('/login');
+      navigate('/');
       return;
     }
     fetchOrderAndBalance();

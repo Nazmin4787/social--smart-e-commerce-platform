@@ -1,20 +1,70 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { getProfile, getLikedProducts, likeProduct, addToCart, updateUserAllergies } from '../api';
+import { getProfile, getLikedProducts, likeProduct, addToCart, updateUserAllergies, createAddress } from '../api';
+  // Address form submission
+  const handleSaveAddress = async (e) => {
+    e.preventDefault();
+    try {
+      await createAddress(user.token, addressForm);
+      alert('Address added successfully!');
+      setShowAddressModal(false);
+      setAddressForm({ street: '', city: '', state: '', zip: '', country: '' });
+      // TODO: Refresh address list here if you display saved addresses
+    } catch (error) {
+      alert('Failed to add address');
+      console.error(error);
+    }
+  };
 import { getUserProfile, getFollowers, getFollowing } from '../api/socialApi';
+import { CartContext } from '../context/CartContext';
 import Header from '../components/Header';
 import ProductCard from '../components/ProductCard';
 import AllergySelector from '../components/AllergySelector';
 
 const ProfilePage = () => {
+    // Address modal state
+    const [showAddressModal, setShowAddressModal] = useState(false);
+    const [addressForm, setAddressForm] = useState({
+      street: '',
+      city: '',
+      state: '',
+      zip: '',
+      country: ''
+    });
+
+    const handleOpenAddressModal = () => setShowAddressModal(true);
+    const handleCloseAddressModal = () => setShowAddressModal(false);
+    const handleAddressFormChange = (e) => {
+      setAddressForm({
+        ...addressForm,
+        [e.target.name]: e.target.value
+      });
+    };
+
+  const handleSaveAddress = async (e) => {
+    e.preventDefault();
+    try {
+      await createAddress(user.token, addressForm);
+      // simple non-blocking flow: close modal and reset form
+      setShowAddressModal(false);
+      setAddressForm({ street: '', city: '', state: '', zip: '', country: '' });
+      // refresh addresses if you have an endpoint (not shown here)
+      // e.g., await fetchAddresses();
+    } catch (error) {
+      console.error('Failed to add address', error);
+    }
+  };
   const navigate = useNavigate();
   const { user, logout } = useContext(AuthContext);
+  const { addItem } = useContext(CartContext);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
   const [likedProducts, setLikedProducts] = useState([]);
   const [likedProductsLoading, setLikedProductsLoading] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [likedProductIds, setLikedProductIds] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingAllergies, setIsEditingAllergies] = useState(false);
@@ -39,10 +89,64 @@ const ProfilePage = () => {
     fetchProfile();
     if (activeTab === 'liked') {
       fetchLikedProducts();
+    } else if (activeTab === 'orders') {
+      fetchOrders();
     } else if (activeTab === 'social') {
       fetchSocialData();
     }
   }, [user, navigate, activeTab]);
+
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath;
+    if (imagePath.startsWith('/media/')) return `http://localhost:8000${imagePath}`;
+    return `http://localhost:8000/media/${imagePath}`;
+  };
+
+  const getStatusColor = (status) => {
+    const statusColors = {
+      'created': '#f59e0b',
+      'pending': '#f59e0b',
+      'processing': '#3b82f6',
+      'shipped': '#8b5cf6',
+      'delivered': '#10b981',
+      'cancelled': '#ef4444',
+      'completed': '#10b981'
+    };
+    return statusColors[status?.toLowerCase()] || '#6b7280';
+  };
+
+  const fetchOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('http://localhost:8000/api/orders/', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const transformedOrders = data.map(order => ({
+          id: order.id,
+          order_number: order.order_number,
+          created_at: order.created_at,
+          status: order.status || 'pending',
+          payment_status: order.payment_status || 'pending',
+          total: order.total,
+          items: order.items.map(item => ({
+            product_title: item.product.title,
+            product_image: item.product.images && item.product.images.length > 0 ? item.product.images[0] : null,
+            quantity: item.qty,
+            price: item.price
+          }))
+        }));
+        setOrders(transformedOrders);
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -104,11 +208,12 @@ const ProfilePage = () => {
 
   const handleAddToCart = async (product) => {
     try {
-      await addToCart(user.token, product.id, 1);
-      alert('Product added to cart!');
+      await addItem(product, 1);
+      navigate('/cart');
     } catch (error) {
       console.error('Error adding to cart:', error);
-      alert(error.response?.data?.error || 'Failed to add to cart');
+      if (error.message === 'Not authenticated') alert('Please log in to add items to cart');
+      else alert('Failed to add to cart');
     }
   };
 
@@ -401,15 +506,67 @@ const ProfilePage = () => {
             {activeTab === 'orders' && (
               <div className="profile-section">
                 <h2 className="section-heading">My Orders</h2>
-                <div className="orders-empty">
-                  <i className="fas fa-shopping-bag"></i>
-                  <p>You haven't placed any orders yet</p>
-                  <button className="btn-primary" onClick={() => navigate('/')}>
-                    Start Shopping
-                  </button>
-                </div>
+
+                {ordersLoading ? (
+                  <div className="loading-spinner">
+                    <div className="spinner"></div>
+                    <p>Loading your orders...</p>
+                  </div>
+                ) : orders.length === 0 ? (
+                  <div className="orders-empty">
+                    <i className="fas fa-shopping-bag"></i>
+                    <p>You haven't placed any orders yet</p>
+                    <button className="btn-primary" onClick={() => navigate('/')}>
+                      Start Shopping
+                    </button>
+                  </div>
+                ) : (
+                  <div className="orders-list">
+                    {orders.map(order => (
+                      <div key={order.id} className="order-card">
+                        <div className="order-card-header">
+                          <div className="order-info">
+                            <span className="order-id">Order #{order.id}</span>
+                            <span className="order-date">{new Date(order.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                          </div>
+                          <div className="order-status-badge" style={{ background: getStatusColor(order.status) }}>{order.status || 'Pending'}</div>
+                        </div>
+
+                        <div className="order-items">
+                          {order.items && order.items.map((item, idx) => (
+                            <div key={idx} className="order-item">
+                              <div className="order-item-image-wrapper">
+                                {item.product_image ? (
+                                  <img src={getImageUrl(item.product_image)} alt={item.product_title} className="order-item-image" />
+                                ) : (
+                                  <div className="order-item-no-image"><i className="fas fa-image"></i></div>
+                                )}
+                              </div>
+                              <div className="order-item-details">
+                                <h4 className="order-item-title">{item.product_title}</h4>
+                                <p className="order-item-quantity">Qty: {item.quantity}</p>
+                              </div>
+                              <div className="order-item-price">₹{(item.price * item.quantity).toFixed(2)}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="order-card-footer">
+                          <div className="order-total">
+                            <span className="total-label">Total Amount</span>
+                            <span className="total-value">₹{parseFloat(order.total).toFixed(2)}</span>
+                          </div>
+                          <div className="order-actions">
+                            <button className="btn-secondary" onClick={() => navigate(`/orders/${order.id}`)}>View Details</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
+
 
             {activeTab === 'addresses' && (
               <div className="profile-section">
@@ -417,8 +574,37 @@ const ProfilePage = () => {
                 <div className="addresses-empty">
                   <i className="fas fa-map-marker-alt"></i>
                   <p>No saved addresses</p>
-                  <button className="btn-primary">Add New Address</button>
+                  <button className="btn-primary" onClick={handleOpenAddressModal}>Add New Address</button>
                 </div>
+                {showAddressModal && (
+                  <div className="address-modal" style={{marginTop: 24, padding: 24, border: '1px solid #ccc', borderRadius: 8, background: '#fafbfc', maxWidth: 400}}>
+                    <h3>Add Address</h3>
+                    <div className="form-field">
+                      <label>Street</label>
+                      <input type="text" name="street" value={addressForm.street} onChange={handleAddressFormChange} placeholder="Street address" />
+                    </div>
+                    <div className="form-field">
+                      <label>City</label>
+                      <input type="text" name="city" value={addressForm.city} onChange={handleAddressFormChange} placeholder="City" />
+                    </div>
+                    <div className="form-field">
+                      <label>State</label>
+                      <input type="text" name="state" value={addressForm.state} onChange={handleAddressFormChange} placeholder="State" />
+                    </div>
+                    <div className="form-field">
+                      <label>Zip</label>
+                      <input type="text" name="zip" value={addressForm.zip} onChange={handleAddressFormChange} placeholder="Zip code" />
+                    </div>
+                    <div className="form-field">
+                      <label>Country</label>
+                      <input type="text" name="country" value={addressForm.country} onChange={handleAddressFormChange} placeholder="Country" />
+                    </div>
+                    <div style={{marginTop: 16, display: 'flex', gap: 8}}>
+                      <button className="btn-secondary" onClick={handleCloseAddressModal}>Cancel</button>
+                      <button className="btn-primary" onClick={handleSaveAddress}>Save Address</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

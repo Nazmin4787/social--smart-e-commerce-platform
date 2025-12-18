@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ProductCard from './ProductCard';
 import { AuthContext } from '../context/AuthContext';
-import { fetchProducts as getProducts, getLikedProducts, likeProduct, addToCart, getFriendsProductActivities, getFriendsPurchased } from '../api';
+import { fetchProducts as getProducts, getLikedProducts, likeProduct, getFriendsProductActivities, getFriendsPurchased } from '../api';
+import { CartContext } from '../context/CartContext';
 
 const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = false, category = null, ingredient = null }) => {
   const [products, setProducts] = useState([]);
@@ -10,6 +12,8 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
   const [friendsActivities, setFriendsActivities] = useState({});
   const [friendsPurchasedByProduct, setFriendsPurchasedByProduct] = useState({});
   const { user } = useContext(AuthContext);
+  const { addItem } = useContext(CartContext);
+  const navigate = useNavigate();
 
   useEffect(() => {
     console.log('ProductsSection - User:', user ? user.name : 'Not logged in');
@@ -151,12 +155,11 @@ const ProductsSection = ({ title = 'Featured Products', limit = 8, isTrending = 
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      await addToCart(token, product.id, 1);
-      alert('Product added to cart!');
+      await addItem(product, 1);
+      navigate('/cart');
     } catch (error) {
-      console.error('Error adding to cart:', error);
-      alert(error.response?.data?.error || 'Failed to add to cart');
+      console.error('Error adding to cart via context:', error);
+      alert(error.message === 'Not authenticated' ? 'Please login to add items to cart' : 'Failed to add to cart');
     }
   };
 

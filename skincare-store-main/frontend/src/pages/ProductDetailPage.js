@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { CartContext } from '../context/CartContext';
 import { fetchProducts, addToCart, getReviews, addReview, checkProductAllergies, likeProduct, getLikedProducts, getFriendsProductActivities, getFriendsPurchased, quickBuy } from '../api';
 import ShareButton from '../components/ShareButton';
 import AllergyAlertModal from '../components/AllergyAlertModal';
@@ -12,6 +13,7 @@ const ProductDetailPage = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const { user } = useContext(AuthContext);
+  const { addItem } = useContext(CartContext);
   const [reviews, setReviews] = useState([]);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -116,8 +118,8 @@ const ProductDetailPage = () => {
         setShowAllergyModal(true);
         setCheckingAllergies(false);
       } else {
-        // Safe to add - proceed with add to cart
-        await addToCart(token, product.id, 1);
+        // Safe to add - proceed with add to cart (update cart context)
+        await addItem(product, 1);
         alert('Added to cart');
         setCheckingAllergies(false);
       }
@@ -129,12 +131,11 @@ const ProductDetailPage = () => {
       } else {
         // Proceed with add to cart anyway if allergy check fails
         try {
-          const token = localStorage.getItem('accessToken');
-          await addToCart(token, product.id, 1);
-          alert('Added to cart');
-        } catch (addErr) {
-          alert(addErr.response?.data?.error || 'Failed to add to cart');
-        }
+            await addItem(product, 1);
+            alert('Added to cart');
+          } catch (addErr) {
+            alert(addErr.response?.data?.error || addErr.message || 'Failed to add to cart');
+          }
       }
       setCheckingAllergies(false);
     }
@@ -142,11 +143,10 @@ const ProductDetailPage = () => {
 
   const handleAddAnywayFromModal = async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      await addToCart(token, product.id, 1);
+      await addItem(product, 1);
       alert('Added to cart (contains allergens - please be careful!)');
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to add to cart');
+      alert(err.response?.data?.error || err.message || 'Failed to add to cart');
     }
   };
 
@@ -242,7 +242,7 @@ const ProductDetailPage = () => {
         if (!confirm) return;
       }
       
-      await addToCart(token, product.id, 1);
+      await addItem(product, 1);
       alert('Added to cart');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to add to cart');

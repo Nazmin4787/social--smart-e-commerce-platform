@@ -149,7 +149,7 @@ const MessagesPage = () => {
     
     try {
       await addItem(product, 1);
-      alert('Product added to cart!');
+      navigate('/cart');
     } catch (error) {
       console.error('Error adding to cart:', error);
       if (error.message === 'Not authenticated') {
