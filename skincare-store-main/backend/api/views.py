@@ -58,9 +58,12 @@ def create_product(request):
     if request.method != "POST":
         return HttpResponseBadRequest()
     
-    # Check if request has files (multipart/form-data)
-    if request.FILES:
-        # Handle file upload
+    # Check content type to determine how to handle the request
+    # Use content_type instead of checking request.FILES directly to avoid reading the stream
+    is_multipart = request.content_type and 'multipart/form-data' in request.content_type
+    
+    if is_multipart or request.POST:
+        # Handle file upload or form data
         title = request.POST.get("title", "")
         description = request.POST.get("description", "")
         price = request.POST.get("price", 0)
@@ -74,7 +77,7 @@ def create_product(request):
         
         # Handle image uploads
         images = []
-        uploaded_files = request.FILES.getlist('images')
+        uploaded_files = request.FILES.getlist('images') if request.FILES else []
         
         if uploaded_files:
             import os
@@ -516,6 +519,11 @@ def add_review(request, product_id):
         return JsonResponse({"error": "Rating must be between 1 and 5"}, status=400)
 
     review = Review.objects.create(user=user, product=product, rating=rating, comment=comment)
+    
+    # Invalidate recommendation cache
+    from .recommender import invalidate_user_recommendation_cache
+    invalidate_user_recommendation_cache(user.id)
+    
     return JsonResponse({"review": review.to_dict(), "message": "Review added"}, status=201)
 
 
@@ -974,6 +982,10 @@ def like_product(request):
     # Create liked product
     liked = UserLikedProduct.objects.create(user=user, product=product)
     
+    # Invalidate recommendation cache
+    from .recommender import invalidate_user_recommendation_cache
+    invalidate_user_recommendation_cache(user.id)
+    
     return JsonResponse({
         "message": "Product added to favorites",
         "liked": liked.to_dict()
@@ -997,6 +1009,11 @@ def unlike_product(request, product_id):
         user = AppUser.objects.get(pk=data["user_id"])
         liked = UserLikedProduct.objects.get(user=user, product_id=product_id)
         liked.delete()
+        
+        # Invalidate recommendation cache
+        from .recommender import invalidate_user_recommendation_cache
+        invalidate_user_recommendation_cache(user.id)
+        
         return JsonResponse({"message": "Product removed from favorites"})
     except AppUser.DoesNotExist:
         return JsonResponse({"error": "User not found"}, status=404)
@@ -1039,6 +1056,11 @@ def toggle_like_product(request):
     if liked_product:
         # Unlike - remove from favorites
         liked_product.delete()
+        
+        # Invalidate recommendation cache
+        from .recommender import invalidate_user_recommendation_cache
+        invalidate_user_recommendation_cache(user.id)
+        
         return JsonResponse({
             "message": "Product removed from favorites",
             "liked": False
@@ -1046,6 +1068,11 @@ def toggle_like_product(request):
     else:
         # Like - add to favorites
         liked = UserLikedProduct.objects.create(user=user, product=product)
+        
+        # Invalidate recommendation cache
+        from .recommender import invalidate_user_recommendation_cache
+        invalidate_user_recommendation_cache(user.id)
+        
         return JsonResponse({
             "message": "Product added to favorites",
             "liked": True,
@@ -1763,6 +1790,10 @@ def follow_user(request, user_id):
         message=f'{current_user.name} started following you'
     )
     
+    # Invalidate recommendation cache (social connections affect recommendations)
+    from .recommender import invalidate_user_recommendation_cache
+    invalidate_user_recommendation_cache(current_user.id)
+    
     return JsonResponse({
         "message": f"You are now following {user_to_follow.name}",
         "followers_count": user_to_follow.get_followers_count(),
@@ -1801,6 +1832,10 @@ def unfollow_user(request, user_id):
         follow.delete()
     except UserFollow.DoesNotExist:
         return JsonResponse({"error": "You are not following this user"}, status=400)
+    
+    # Invalidate recommendation cache (social connections affect recommendations)
+    from .recommender import invalidate_user_recommendation_cache
+    invalidate_user_recommendation_cache(current_user.id)
     
     return JsonResponse({
         "message": f"You unfollowed {user_to_unfollow.name}",
@@ -3870,3 +3905,314 @@ def get_friends_purchased(request, product_id):
         return JsonResponse({"error": "Product not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+
+# ========== AI RECOMMENDATIONS ==========
+from .recommender import (
+    ContentBasedRecommender,
+    CollaborativeFilteringRecommender,
+    SocialRecommender,
+    HybridRecommender,
+    DataExporter
+)
+from django.views.decorators.cache import cache_page
+from django.core.cache import cache
+
+
+@csrf_exempt
+def get_personalized_recommendations(request):
+    """
+    GET /api/recommendations/personalized/
+    Returns personalized product recommendations using hybrid approach.
+    Requires authentication.
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    # Get current user
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    token = auth_header.split(" ")[1]
+    payload = decode_jwt(token)
+    
+    if not payload or "error" in payload:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    user_id = payload.get("user_id")
+    
+    try:
+        user = AppUser.objects.get(id=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    try:
+        # Get limit parameter
+        limit = int(request.GET.get('limit', 20))
+        limit = min(max(limit, 1), 50)  # Between 1 and 50
+        
+        # Check cache first
+        cache_key = f'recommendations_user_{user_id}_limit_{limit}'
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return JsonResponse(cached_result)
+        
+        # Check if user has any interaction history
+        user_history = DataExporter.get_user_history(user_id)
+        
+        if not user_history['all']:
+            # New user - use cold start recommendations
+            recommendations = HybridRecommender.get_cold_start_recommendations(top_n=limit)
+        else:
+            # Existing user - use personalized recommendations
+            recommendations = HybridRecommender.get_personalized_recommendations(user_id, top_n=limit)
+        
+        result = {
+            "success": True,
+            "count": len(recommendations),
+            "recommendations": recommendations,
+            "user_has_history": bool(user_history['all'])
+        }
+        
+        # Cache for 1 hour (3600 seconds)
+        cache.set(cache_key, result, 3600)
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+def get_similar_products(request, product_id):
+    """
+    GET /api/recommendations/similar/<product_id>/
+    Returns products similar to the given product.
+    Public endpoint - no authentication required.
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    try:
+        # Verify product exists
+        product = Product.objects.get(id=product_id)
+        
+        # Get limit parameter
+        limit = int(request.GET.get('limit', 10))
+        limit = min(max(limit, 1), 20)  # Between 1 and 20
+        
+        # Check cache first
+        cache_key = f'similar_products_{product_id}_limit_{limit}'
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return JsonResponse(cached_result)
+        
+        # Get similar products
+        similar_items = ContentBasedRecommender.get_similar_products(product_id, top_n=limit)
+        
+        # Get full product details
+        recommendations = []
+        for item in similar_items:
+            try:
+                similar_product = Product.objects.get(id=item['product_id'])
+                recommendations.append({
+                    'product': similar_product.to_dict(),
+                    'similarity_score': item['similarity_score']
+                })
+            except Product.DoesNotExist:
+                continue
+        
+        result = {
+            "success": True,
+            "product_id": product_id,
+            "product_title": product.title,
+            "count": len(recommendations),
+            "similar_products": recommendations
+        }
+        
+        # Cache for 24 hours (86400 seconds) - similar products change less frequently
+        cache.set(cache_key, result, 86400)
+        
+        return JsonResponse(result)
+        
+    except Product.DoesNotExist:
+        return JsonResponse({"error": "Product not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+def get_friends_trending(request):
+    """
+    GET /api/recommendations/friends-trending/
+    Returns products trending among user's friends.
+    Requires authentication.
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    # Get current user
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    token = auth_header.split(" ")[1]
+    payload = decode_jwt(token)
+    
+    if not payload or "error" in payload:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    user_id = payload.get("user_id")
+    
+    try:
+        user = AppUser.objects.get(id=user_id)
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    try:
+        # Get limit parameter
+        limit = int(request.GET.get('limit', 15))
+        limit = min(max(limit, 1), 30)  # Between 1 and 30
+        
+        # Check cache first
+        cache_key = f'friends_trending_user_{user_id}_limit_{limit}'
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return JsonResponse(cached_result)
+        
+        # Get trending products among friends
+        trending_items = SocialRecommender.get_trending_among_friends(user_id, top_n=limit)
+        
+        if not trending_items:
+            result = {
+                "success": True,
+                "count": 0,
+                "message": "No trending products among friends",
+                "trending_products": []
+            }
+            # Cache empty results for 30 minutes
+            cache.set(cache_key, result, 1800)
+            return JsonResponse(result)
+        
+        # Get full product details
+        recommendations = []
+        for item in trending_items:
+            try:
+                product = Product.objects.get(id=item['product_id'])
+                recommendations.append({
+                    'product': product.to_dict(),
+                    'trending_score': item['score']
+                })
+            except Product.DoesNotExist:
+                continue
+        
+        result = {
+            "success": True,
+            "count": len(recommendations),
+            "trending_products": recommendations
+        }
+        
+        # Cache for 30 minutes (1800 seconds) - trending changes more frequently
+        cache.set(cache_key, result, 1800)
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+def get_recommendation_stats(request):
+    """
+    GET /api/recommendations/stats/
+    Returns statistics about the recommendation system.
+    Admin only.
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    # Get current user
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    token = auth_header.split(" ")[1]
+    payload = decode_jwt(token)
+    
+    if not payload or "error" in payload:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    user_id = payload.get("user_id")
+    
+    try:
+        user = AppUser.objects.get(id=user_id)
+        
+        # Check if user is admin
+        if not user.is_staff:
+            return JsonResponse({"error": "Admin access required"}, status=403)
+        
+        # Get recommendation stats
+        from .recommender import get_recommendation_stats
+        stats = get_recommendation_stats()
+        
+        return JsonResponse({
+            "success": True,
+            "stats": stats
+        })
+        
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+def refresh_recommendation_cache(request):
+    """
+    POST /api/recommendations/refresh-cache/
+    Rebuild feature vectors and clear cache.
+    Admin only.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    
+    # Get current user
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    token = auth_header.split(" ")[1]
+    payload = decode_jwt(token)
+    
+    if not payload or "error" in payload:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    
+    user_id = payload.get("user_id")
+    
+    try:
+        user = AppUser.objects.get(id=user_id)
+        
+        # Check if user is admin
+        if not user.is_staff:
+            return JsonResponse({"error": "Admin access required"}, status=403)
+        
+        # Rebuild feature vectors
+        from .recommender import ProductFeatureVector
+        from django.core.cache import cache
+        
+        ProductFeatureVector.build_feature_vectors()
+        cache.clear()
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Recommendation cache refreshed successfully"
+        })
+        
+    except AppUser.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

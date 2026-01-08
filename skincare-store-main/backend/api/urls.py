@@ -119,4 +119,11 @@ urlpatterns = [
     # Orders
     path('orders/my-orders/', views.get_user_orders),
     path('orders/<int:order_id>/', views.get_order_detail),
+    
+    # ========== AI RECOMMENDATIONS ==========
+    path('recommendations/personalized/', views.get_personalized_recommendations),
+    path('recommendations/similar/<int:product_id>/', views.get_similar_products),
+    path('recommendations/friends-trending/', views.get_friends_trending),
+    path('recommendations/stats/', views.get_recommendation_stats),
+    path('recommendations/refresh-cache/', views.refresh_recommendation_cache),
 ]

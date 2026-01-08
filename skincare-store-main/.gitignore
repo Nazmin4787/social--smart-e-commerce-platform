@@ -1,4 +1,6 @@
 ﻿venv/
+.venv/
+backend/.venv/
 __pycache__/
 *.pyc
 .env
@@ -7,3 +9,11 @@ build/
 dist/
 .DS_Store
 Thumbs.db
+*.sqlite3
+*.db
+media/products/
+*.log
+.idea/
+.vscode/
+*.swp
+*.swo
